@@ -18,3 +18,5 @@ evals/
 
 # Unsloth / CUDA
 *.cu
+
+unsloth_compiled_cache/
