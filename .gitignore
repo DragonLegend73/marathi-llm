@@ -19,4 +19,12 @@ evals/
 # Unsloth / CUDA
 *.cu
 
+#cache
 unsloth_compiled_cache/
+
+#linux files
+*.swp
+.DS_Store
+__pycache__/
+*.pyc
+.README.md.kate-swp
