@@ -1,0 +1,20 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Model outputs — too large for GitHub (can be GBs)
+outputs/
+*.gguf
+*.bin
+*.safetensors
+
+# Training artifacts — regeneratable
+evals/
+
+# Hugging Face cache
+.cache/
+
+# Unsloth / CUDA
+*.cu
