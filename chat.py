@@ -60,6 +60,7 @@ while True:
         output_ids = model.generate(
             **inputs,
             max_new_tokens = MAX_NEW_TOKENS,
+            max_length     = None,
             temperature    = TEMPERATURE,
             do_sample      = True,
             pad_token_id   = tokenizer.eos_token_id,

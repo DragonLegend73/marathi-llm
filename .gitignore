@@ -27,3 +27,6 @@ unsloth_compiled_cache/
 .DS_Store
 *.pyc
 .README.md.kate-swp
+
+#ollama model
+outputs_gguf/
