@@ -40,3 +40,6 @@ data/processed/*.jsonl
 
 # Planning files
 plan*.md
+
+# External evaluation benchmark repos
+IndicIFEval/
