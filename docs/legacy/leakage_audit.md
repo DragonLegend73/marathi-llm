@@ -11,7 +11,7 @@
 An audit of the v0 baseline reveals significant evaluation leakage and explains the inflated headline results:
 
 1. **Training-Contaminated Prompts (4 of 10 prompts leaked):**
-   Under a strict definition of leakage (any prompt that appeared in the training split either verbatim, as a near-duplicate, or as a direct semantic substring), **4 of the 10 evaluation prompts were seen during training**:
+   Under a broad definition of leakage (any prompt that appeared in the training split either verbatim, as a near-duplicate, or as a direct semantic substring), **4 of the 10 evaluation prompts were present in the training split**:
    - **Prompt 1** is an exact match for **Row 0** of the training split.
    - **Prompt 2** is an exact match for **Row 1** of the training split.
    - **Prompt 3** is a near-match to **Row 10004** in the training split (`"पाण्याचे महत्त्व सांगणारी काही वाक्ये लिहा"`).
@@ -19,11 +19,15 @@ An audit of the v0 baseline reveals significant evaluation leakage and explains 
 
 2. **Deltas Driven by Memorization:**
    - The **4 contaminated prompts** averaged an improvement of **+19.73 chrF++ points** (dominated by Prompt 2 at $\Delta = +33.07$ and Prompt 4 at $\Delta = +25.06$).
-   - The **6 genuinely unseen prompts** averaged an improvement of only **+4.25 chrF++ points**.
-   - The original headline average of $+10.44$ was heavily skewed by memorization of training examples.
+   - The **6 unseen prompts** averaged an improvement of only **+4.25 chrF++ points**.
+   - Note: This comparison was evaluated under v0's original protocol (temperature 0.7 sampling, single sample per prompt, scored against the 10 hand-written reference strings).
+   - The original headline average of $+10.44$ was heavily skewed by memorization of these training examples.
 
 3. **Reference Strings Audit:**
-   The references in `evaluate.py` were not official benchmark references or independent human translations. They were 10 hardcoded strings manually written into the script, two of which mirrored the training dataset's translated responses verbatim.
+   The references in `evaluate.py` were not official benchmark references or independent human translations. They were 10 hardcoded strings manually written into the script. At least three of the ten references trace directly to training data:
+   - Prompt 2 reference is word-for-word identical to Row 1's training answer (`"लाल, निळा आणि पिवळा असे तीन प्राथमिक रंग आहेत."`).
+   - Prompt 4 reference is word-for-word identical to Row 37982's training answer (`"भारताची राजधानी नवी दिल्ली आहे."`).
+   - Prompt 1 reference is a close paraphrase of Row 0's training answer (`"1. संतुलित आहार घ्या आणि भरपूर फळे आणि भाज्या खा..."` vs Row 0's `"1. संतुलित आहार घ्या आणि भरपूर फळे आणि भाज्यांचा समावेश करा..."`).
 
 4. **Validation Loss Definition:**
    The reported validation loss of `0.4479` was computed on a random 5% slice (1,725 examples) of the filtered dataset using standard sequence loss without prompt/completion masking (the model was evaluated on predicting both the system prompt/instruction tokens and completion tokens).
@@ -51,7 +55,7 @@ Each of the 10 prompts from `infer.py` was checked against the 32,774 examples i
 
 - **All 10 prompts average Δ:** **+10.44** chrF++
 - **4 contaminated prompts (1, 2, 3, 4) average Δ:** **+19.73** chrF++
-- **6 genuinely unseen prompts (5, 6, 7, 8, 9, 10) average Δ:** **+4.25** chrF++
+- **6 unseen prompts (5, 6, 7, 8, 9, 10) average Δ:** **+4.25** chrF++
 
 ---
 
@@ -71,6 +75,7 @@ REFERENCES = [
 
 - **Prompt 2 reference** is word-for-word identical to the dataset's `translated_text` response for Row 1: `"लाल, निळा आणि पिवळा असे तीन प्राथमिक रंग आहेत."`
 - **Prompt 4 reference** is word-for-word identical to Row 37982's `translated_text` response: `"भारताची राजधानी नवी दिल्ली आहे."`
+- **Prompt 1 reference** is a close paraphrase of Row 0's `translated_text` response.
 - The remaining references are single-sentence human summaries crafted by the author. Scoring open-ended answers against a single hand-written reference sentence using character n-gram overlap (chrF++) rewards verbatim recall and heavily penalizes valid alternative phrasings.
 
 ---
@@ -97,53 +102,55 @@ To prevent future data leakage, `rachittshah/alpaca-marahti` (S0) was deduplicat
 - Near/exact duplicates by normalized instruction removed: 43 rows
 - Unique rows remaining: 51,959
 - Deterministic SHA-256 hash split:
-  - `data/splits/s0_test_ids.json`: 1,000 examples (strictly held out)
+  - `data/splits/s0_test_ids.json`: 1,000 examples (held out from future training)
   - `data/splits/s0_dev_ids.json`: 500 examples (for hyperparameter/dev loss)
   - `data/splits/s0_train_ids.json`: 50,459 examples (pool for training)
-  - `data/splits/s0_test_200.json`: First 200 examples of the clean test split for fast baseline re-scoring (Task 0.5)
+  - `data/splits/s0_test_200.json`: First 200 examples of the new test split for baseline re-scoring
 
-Zero ID or text overlap exists between train, dev, and test sets.
+Zero ID or text overlap exists between train, dev, and test sets within these new manifests.
 
 ---
 
-## 6. Honest v0 Re-evaluation on 200 Unseen Test Prompts (Task 0.5)
+## 6. v0 Re-evaluation on 200 Held-Out Test Prompts (Possible Overlap with v0 Training Data) (Task 0.5)
 
-To establish the ground truth for v0 without train-set contamination or cherry-picked prompts, both the base model (`unsloth/Qwen2.5-1.5B-Instruct-bnb-4bit`) and the published v0 adapter (`DragonLegend/marathi-qwen2.5-lora`) were evaluated on the first 200 prompts of `data/splits/s0_test_ids.json`.
+Both the base model (`unsloth/Qwen2.5-1.5B-Instruct-bnb-4bit`) and the published v0 adapter (`DragonLegend/marathi-qwen2.5-lora`) were evaluated on the first 200 prompts of `data/splits/s0_test_ids.json`.
 
-Decoding was kept strictly uniform and deterministic across both models: greedy decoding, `max_new_tokens=256`, `do_sample=False`.
+> [!NOTE]
+> These 200 prompts are held out from the *new* split manifests. However, because v0 originally trained on an unmanifested random 95% split, some of these 200 rows may have been present in v0's original training data.
+
+Decoding was kept uniform and deterministic across both models: greedy decoding, `max_new_tokens=256`, `do_sample=False`, under the original v0 prompt template.
 
 ### Summary Comparison Table
 
 | Metric | Base Model (`Qwen2.5-1.5B-Instruct`) | Fine-Tuned v0 (`marathi-qwen2.5-lora`) | Measured Delta (Δ) | Original v0 Claim |
 |---|---|---|---|---|
-| **Corpus chrF++** | **17.75** | **22.37** | **+4.62** | *+10.44* |
-| **EOS Rate (%)** | 1.00% | 81.50% | **+80.50%** | *Not measured* |
-| **Script Purity (%)** | 95.88% | 93.69% | **-2.20%** | *Not measured* |
+| **Corpus chrF++** | 17.75 | **22.37** | **+4.62** | *+10.44* |
+| **EOS Rate (%)** | 1.00% | 81.50% | **+80.50 pp** | *Not measured* |
+| **Script Purity (%)** | 95.88% | 93.69% | **-2.20 pp** | *Not measured* |
 | **Mean Output Length** | 255.6 tokens | 123.6 tokens | **-131.9 tokens** | *Not measured* |
 
-### Analysis of the Re-evaluated Baseline
+### Observations
 
-1. **The chrF++ gain is real, but cut in half (+4.62 vs +10.44):**
-   When tested on 200 genuine unseen Marathi prompts, fine-tuning improves chrF++ by **+4.62 points**. The original claim of **+10.44 points** was an artifact of testing on contaminated rows.
-2. **The primary improvement is conversational termination (EOS Rate 1% → 81.5%):**
-   The base model fails to recognize when to stop in Marathi; in 99% of cases it rambles on until hitting the hard ceiling of 256 tokens (averaging 255.6 tokens). The fine-tuned model terminates naturally 81.5% of the time, producing concise Marathi answers (averaging 123.6 tokens).
-3. **Slight drop in script purity (-2.20%):**
-   The fine-tuned model exhibits slight English code-mixing inherited from machine-translated artifacts in Alpaca, causing Devanagari letter purity to drop slightly from 95.88% to 93.69%.
+1. **chrF++ against machine-translated reference answers rose about 4.6 points on this set (n=200, no confidence interval).** Fluency and correctness are not yet measured (that is the goal of Phase 1 benchmarks).
+2. **The primary change in generation behavior is conversational termination under the v0 template (+80.5 pp EOS rate):**
+   Under the v0 prompt template, the base model rarely produced an EOS token in Marathi (rambling to the 256-token limit 99% of the time, averaging 255.6 tokens). The fine-tuned model terminated naturally 81.5% of the time, producing shorter responses (averaging 123.6 tokens). This will be re-measured with the native chat template in Phase 1.
+3. **Small shift in script purity (-2.2 pp):**
+   Devanagari letter purity shifted slightly from 95.88% to 93.69%, reflecting occasional English tokens in the translated Alpaca dataset.
 
 ---
 
 ## 7. Hardware Profile on RTX 3050 Ti Laptop GPU (Task 0.6)
 
-100 training steps of the baseline QLoRA configuration were profiled on the RTX 3050 Ti Laptop GPU (batch 1, accumulation 8, `max_seq_len=512`, optimizer `paged_adamw_8bit`).
+A 100-step training profiling run was performed using the baseline QLoRA configuration (Unsloth Qwen2.5-1.5B 4-bit, LoRA r=16/alpha=32, batch size 1, gradient accumulation 8, `max_seq_len=512`, optimizer `paged_adamw_8bit`).
 
 Detailed logs are saved in `results/hw_profile.json`:
 
 - **GPU**: NVIDIA GeForce RTX 3050 Ti Laptop GPU (4 GB VRAM)
 - **Peak VRAM Allocated**: **1.38 GB**
-- **Peak VRAM Reserved**: **1.45 GB** (only 36% of 4 GB capacity utilized)
+- **Peak VRAM Reserved**: **1.45 GB** (about 36% of 4 GB capacity utilized)
 - **Throughput**: **0.249 steps/sec** (≈ **1.99 samples/sec**)
 - **Thermals & Power**:
-  - Idle Temp: 51 °C | Load Temp: 59 °C (stable laptop thermals)
-  - Power draw: 33.2 W (under 60 W TGP cap)
+  - Idle Temp: 51 °C | Temperature: 59 °C at the end of a 100-step profile
+  - Measured power draw: 33.2 W
 - **Extrapolated Time for 12k Examples**:
   - 1,500 optimizer steps / 0.249 steps/s = ~6,031 seconds ≈ **100.5 minutes** (~1.67 hours).
