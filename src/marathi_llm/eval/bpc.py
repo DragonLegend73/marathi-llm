@@ -11,8 +11,8 @@ from huggingface_hub import hf_hub_download
 from marathi_llm.generate import load_model_and_tokenizer
 
 
-def load_marathi_reference_texts(limit: Optional[int] = 500) -> List[str]:
-    """Loads held-out human-written Marathi sentences from Flores-IN dev."""
+def load_marathi_reference_texts(limit: Optional[int] = None) -> List[str]:
+    """Loads held-out human-written Marathi sentences from Flores-IN dev (all 997 sentences by default)."""
     try:
         path = hf_hub_download(
             repo_id="google/IndicGenBench_flores_in",
@@ -27,8 +27,7 @@ def load_marathi_reference_texts(limit: Optional[int] = 500) -> List[str]:
             texts = texts[:limit]
         return texts
     except Exception as e:
-        print(f"Error loading Flores Marathi text: {e}")
-        return []
+        raise RuntimeError(f"Failed to load Flores Marathi reference texts: {e}") from e
 
 
 def compute_bpc(
@@ -39,6 +38,7 @@ def compute_bpc(
 ) -> Dict[str, float]:
     """
     Computes Bits-Per-Character (BPC) and Bits-Per-Byte (BPB) over human-written Marathi texts.
+    Prepends BOS/EOS token so the first text token is scored, ensuring fair character accounting.
     Formula:
       BPC = Total NLL / (ln(2) * total_chars)
       BPB = Total NLL / (ln(2) * total_utf8_bytes)
@@ -50,27 +50,38 @@ def compute_bpc(
 
     model.eval()
 
+    bos_id = tokenizer.bos_token_id or tokenizer.eos_token_id
+
     for idx, text in enumerate(texts):
         if not text:
             continue
-        inputs = tokenizer(text, return_tensors="pt").to(device)
-        n_tokens = inputs["input_ids"].shape[1]
-        if n_tokens < 2:
+
+        raw_ids = tokenizer.encode(text, add_special_tokens=False)
+        # Prepend BOS token if not already present, so token 0 is predicted given BOS
+        if bos_id is not None and (len(raw_ids) == 0 or raw_ids[0] != bos_id):
+            input_ids = [bos_id] + raw_ids
+        else:
+            input_ids = raw_ids
+
+        if len(input_ids) < 2:
             continue
 
+        input_tensor = torch.tensor([input_ids], dtype=torch.long, device=device)
+
         with torch.no_grad():
-            outputs = model(**inputs, labels=inputs["input_ids"])
+            outputs = model(input_tensor, labels=input_tensor)
             loss = outputs.loss.item()  # mean NLL per predicted token
 
-        n_predicted_tokens = n_tokens - 1
-        seq_nll = loss * n_predicted_tokens
+        # Number of predicted tokens equals number of original text tokens (len(input_ids) - 1)
+        n_predicted = len(input_ids) - 1
+        seq_nll = loss * n_predicted
 
         total_nll += seq_nll
-        total_tokens += n_predicted_tokens
+        total_tokens += n_predicted
         total_chars += len(text)
         total_bytes += len(text.encode("utf-8"))
 
-        if (idx + 1) % 100 == 0:
+        if (idx + 1) % 100 == 0 or (idx + 1) == len(texts):
             print(f"Evaluated BPC on {idx + 1}/{len(texts)} sentences...")
 
     ln2 = math.log(2.0)
@@ -83,6 +94,10 @@ def compute_bpc(
         "total_chars": total_chars,
         "total_utf8_bytes": total_bytes,
         "total_tokens": total_tokens,
+        "bits_per_character": float(bpc),
+        "bits_per_byte": float(bpb),
+        "token_perplexity": float(perplexity),
+    }
         "bits_per_character": float(bpc),
         "bits_per_byte": float(bpb),
         "token_perplexity": float(perplexity),

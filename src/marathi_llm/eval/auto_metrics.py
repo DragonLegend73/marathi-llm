@@ -77,7 +77,7 @@ def evaluate_generations(items: List[Dict[str, Any]]) -> Dict[str, Any]:
     token_lengths = []
 
     for item in items:
-        out = item.get("output", "")
+        out = item.get("output") or item.get("generation") or ""
         purities.append(compute_script_purity(out))
 
         rep = compute_repetition_metrics(out)

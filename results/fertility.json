@@ -1,8 +1,22 @@
 {
   "unsloth/Qwen2.5-1.5B-Instruct-bnb-4bit": {
-    "n_sentences": 1496,
-    "tokens_per_word": 3.732398635846912,
-    "tokens_per_char": 0.5728759538432905,
-    "pct_exceeding_max_len": 0.0
+    "flores_tokens_per_word": 6.681926376972045,
+    "s0_tokens_per_word": 6.513730528344307,
+    "combined_tokens_per_word": 6.596418657813095,
+    "combined_tokens_per_char": 0.9541752449484909,
+    "pct_exceeding_512": 19.238476953907817,
+    "n_flores": 997,
+    "n_s0_responses": 499,
+    "n_s0_full_examples": 499
+  },
+  "sarvamai/sarvam-1": {
+    "flores_tokens_per_word": 1.7646830888458345,
+    "s0_tokens_per_word": 1.77726031797013,
+    "combined_tokens_per_word": 1.771077124040712,
+    "combined_tokens_per_char": 0.2561871882786882,
+    "pct_exceeding_512": 0.0,
+    "n_flores": 997,
+    "n_s0_responses": 499,
+    "n_s0_full_examples": 499
   }
 }

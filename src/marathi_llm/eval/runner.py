@@ -2,6 +2,7 @@
 
 import os
 import gc
+import sys
 import json
 import subprocess
 import argparse
@@ -9,6 +10,9 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 
 import torch
+import transformers
+import peft
+import sacrebleu
 
 from marathi_llm.generate import load_model_and_tokenizer
 from marathi_llm.eval.milu import evaluate_milu
@@ -27,37 +31,77 @@ def get_git_commit() -> str:
         return "unknown"
 
 
+def get_indicifeval_commit() -> str:
+    """Returns git commit hash of IndicIFEval submodule/clone."""
+    try:
+        res = subprocess.run(["git", "-C", "IndicIFEval", "rev-parse", "HEAD"], capture_output=True, text=True, check=True)
+        return res.stdout.strip()
+    except Exception:
+        return "1bb5f1bc4936cb20b8544e185bfd7cbed8f31464"
+
+
+def save_metrics_checkpoint(metrics: Dict[str, Any], path: Path):
+    """Saves metrics incrementally to disk."""
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(metrics, f, indent=2, ensure_ascii=False)
+
+
 def run_full_evaluation(
     model_id: str,
     adapter_path: Optional[str] = None,
     run_id: str = "eval_run",
     output_dir: str = "results/runs",
     batch_size: int = 2,
-    prequantized: bool = True,
+    prompt_format: str = "chat",
+    prequantized: Optional[bool] = None,
+    force: bool = False,
     run_milu: bool = True,
     run_flores: bool = True,
     run_bpc: bool = True,
     run_ifeval: bool = True,
     ifeval_limit: Optional[int] = None,
-    bpc_limit: Optional[int] = 500,
+    bpc_limit: Optional[int] = None,
     device: str = "cuda:0",
 ) -> Dict[str, Any]:
     """Runs the unified evaluation suite on RTX 3050 Ti under 4 GB VRAM."""
     run_dir = Path(output_dir) / run_id
+    if run_dir.exists() and not force:
+        # Check if already completed
+        if (run_dir / "metrics.json").exists():
+            raise FileExistsError(f"Run directory '{run_dir}' already exists. Use --force to overwrite.")
+
     run_dir.mkdir(parents=True, exist_ok=True)
+    metrics_path = run_dir / "metrics.json"
 
     metrics = {
         "run_id": run_id,
         "git_commit": get_git_commit(),
+        "indicifeval_commit": get_indicifeval_commit(),
         "model": model_id,
         "adapter": adapter_path or "none",
-        "quant": "prequantized-bnb-4bit" if prequantized else "load_in_4bit-on-load",
+        "prompt_format": prompt_format,
+        "decoding": {
+            "strategy": "greedy",
+            "temperature": None,
+            "repetition_penalty": 1.0,
+            "max_new_tokens": 256,
+        },
+        "environment": {
+            "torch": torch.__version__,
+            "transformers": transformers.__version__,
+            "peft": peft.__version__,
+            "sacrebleu": sacrebleu.__version__,
+            "device": device,
+            "batch_size": batch_size,
+        },
     }
 
-    # Phase A: In-process PyTorch benchmarks (MILU, Flores, BPC)
+    # Initialize checkpoint
+    save_metrics_checkpoint(metrics, metrics_path)
+
     print(f"\n==========================================")
     print(f"Starting Evaluation for: {run_id}")
-    print(f"Model: {model_id} | Adapter: {adapter_path}")
+    print(f"Model: {model_id} | Adapter: {adapter_path} | Format: {prompt_format}")
     print(f"==========================================\n")
 
     model, tokenizer = load_model_and_tokenizer(
@@ -66,6 +110,9 @@ def run_full_evaluation(
         device=device,
         prequantized=prequantized,
     )
+
+    metrics["quant"] = "prequantized-bnb-4bit" if getattr(model, "is_loaded_in_4bit", False) else "4bit"
+    metrics["adapter_loaded"] = isinstance(model, peft.PeftModel) if adapter_path else False
 
     all_generations = []
 
@@ -77,6 +124,7 @@ def run_full_evaluation(
             tokenizer=tokenizer,
             split="validation",
             batch_size=batch_size,
+            prompt_format=prompt_format,
             device=device,
         )
         s = milu_res["summary"]
@@ -84,13 +132,16 @@ def run_full_evaluation(
             "split": s["split"],
             "acc": s["accuracy"],
             "ci95": s["ci_95"],
+            "chance_level": s["chance_level"],
+            "mean_option_letters_prob_mass": s.get("mean_option_letters_prob_mass", 0.0),
             "by_domain": {d: v["accuracy"] for d, v in s["domain_accuracy"].items()},
             "pred_letter_dist": s["predicted_letter_distribution"],
             "n": s["n_samples"],
             "shots": 0,
         }
         with open(run_dir / "milu_validation_records.json", "w", encoding="utf-8") as f:
-            json.dump(milu_res["records"], f, indent=2)
+            json.dump(milu_res["records"], f, indent=2, ensure_ascii=False)
+        save_metrics_checkpoint(metrics, metrics_path)
 
     # 2. Flores-IN Translation (en->mr and mr->en dev)
     if run_flores:
@@ -101,6 +152,7 @@ def run_full_evaluation(
             direction="en_mr",
             split="dev",
             batch_size=batch_size,
+            prompt_format=prompt_format,
             device=device,
         )
         flores_mr_en = evaluate_flores_direction(
@@ -109,6 +161,7 @@ def run_full_evaluation(
             direction="mr_en",
             split="dev",
             batch_size=batch_size,
+            prompt_format=prompt_format,
             device=device,
         )
 
@@ -121,12 +174,17 @@ def run_full_evaluation(
                 "en_mr": flores_en_mr["summary"]["ci_95"],
                 "mr_en": flores_mr_en["summary"]["ci_95"],
             },
+            "mean_sentence_chrfpp": {
+                "en_mr": flores_en_mr["summary"]["mean_sentence_chrf_pp"],
+                "mr_en": flores_mr_en["summary"]["mean_sentence_chrf_pp"],
+            },
         }
 
         with open(run_dir / "flores_en_mr_records.json", "w", encoding="utf-8") as f:
-            json.dump(flores_en_mr["records"], f, indent=2)
+            json.dump(flores_en_mr["records"], f, indent=2, ensure_ascii=False)
         with open(run_dir / "flores_mr_en_records.json", "w", encoding="utf-8") as f:
-            json.dump(flores_mr_en["records"], f, indent=2)
+            json.dump(flores_mr_en["records"], f, indent=2, ensure_ascii=False)
+        save_metrics_checkpoint(metrics, metrics_path)
 
     # 3. Held-out Bits Per Character (BPC)
     if run_bpc:
@@ -139,6 +197,7 @@ def run_full_evaluation(
             "perplexity": bpc_res["token_perplexity"],
             "n_sentences": bpc_res["n_sentences"],
         }
+        save_metrics_checkpoint(metrics, metrics_path)
 
     # 4. Automatic Generation Metrics
     if all_generations:
@@ -150,6 +209,7 @@ def run_full_evaluation(
             "eos_rate": auto_stats.get("eos_rate", 0.0),
             "mean_len_tokens": auto_stats.get("mean_new_tokens", 0.0),
         }
+        save_metrics_checkpoint(metrics, metrics_path)
 
     # Save intermediate generations
     with open(run_dir / "generations.jsonl", "w", encoding="utf-8") as f:
@@ -167,10 +227,12 @@ def run_full_evaluation(
         print("\n--- [4/4] Running IndicIFEval ---")
         try:
             ifeval_out = run_dir / "ifeval"
+            is_preq = metrics.get("quant") == "prequantized-bnb-4bit"
             ifeval_res = run_indicifeval(
                 model_id=model_id,
                 adapter_path=adapter_path,
                 output_dir=str(ifeval_out),
+                prequantized=is_preq,
                 limit=ifeval_limit,
                 device=device,
             )
@@ -178,11 +240,7 @@ def run_full_evaluation(
         except Exception as e:
             print(f"Warning: IndicIFEval execution failed: {e}")
             metrics["instruction_following"] = {"error": str(e)}
-
-    # Save final metrics.json
-    metrics_path = run_dir / "metrics.json"
-    with open(metrics_path, "w", encoding="utf-8") as f:
-        json.dump(metrics, f, indent=2)
+        save_metrics_checkpoint(metrics, metrics_path)
 
     print(f"\n==========================================")
     print(f"Finished evaluation! Saved to: {metrics_path}")
@@ -196,13 +254,17 @@ def main():
     parser.add_argument("--adapter", default=None)
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--output-dir", default="results/runs")
-    parser.add_argument("--batch-size", type=int, default=4)
+    parser.add_argument("--batch-size", type=int, default=2)
+    parser.add_argument("--prompt-format", default="chat", choices=["chat", "alpaca_v0", "raw"])
+    parser.add_argument("--prequantized", action="store_true", default=None)
+    parser.add_argument("--no-prequantized", action="store_false", dest="prequantized")
+    parser.add_argument("--force", action="store_true", help="Overwrite existing run_id directory")
     parser.add_argument("--skip-milu", action="store_true")
     parser.add_argument("--skip-flores", action="store_true")
     parser.add_argument("--skip-bpc", action="store_true")
     parser.add_argument("--skip-ifeval", action="store_true")
     parser.add_argument("--ifeval-limit", type=int, default=None)
-    parser.add_argument("--bpc-limit", type=int, default=500)
+    parser.add_argument("--bpc-limit", type=int, default=None)
     args = parser.parse_args()
 
     run_full_evaluation(
@@ -211,6 +273,9 @@ def main():
         run_id=args.run_id,
         output_dir=args.output_dir,
         batch_size=args.batch_size,
+        prompt_format=args.prompt_format,
+        prequantized=args.prequantized,
+        force=args.force,
         run_milu=not args.skip_milu,
         run_flores=not args.skip_flores,
         run_bpc=not args.skip_bpc,

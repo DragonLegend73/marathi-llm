@@ -20,6 +20,8 @@ MODEL_NAME = "Qwen/Qwen2.5-1.5B-Instruct"
 DATASET_NAME = "rachittshah/alpaca-marahti"
 MAX_SEQ_LEN = 512
 
+import unicodedata
+
 PROMPTS = [
     "निरोगी राहण्यासाठी तीन टिप्स द्या.",
     "तीन मुख्य रंग कोणते आहेत?",
@@ -51,9 +53,11 @@ def normalize_text(text):
         return ""
     text = text.strip()
     text = re.sub(r'[\r\n\t]+', ' ', text)
-    text = re.sub(r'[^\w\s]', '', text)
-    text = re.sub(r'\s+', ' ', text)
-    return text.strip().lower()
+    # Keep characters whose Unicode category starts with L (Letter), M (Mark / Matra), N (Number), or whitespace
+    chars = [c for c in text if c.isspace() or unicodedata.category(c)[0] in ("L", "M", "N")]
+    cleaned = "".join(chars)
+    cleaned = re.sub(r'\s+', ' ', cleaned)
+    return cleaned.strip().lower()
 
 def extract_instruction_and_response(translated_text):
     """
@@ -185,7 +189,8 @@ def main():
             print(f"    Matched Dataset Row ID: {top['row_id']} | Status: {top['split_status']} | Ratio: {top['fuzz_ratio']:.1f}%")
             print(f"    Dataset Extracted Inst: {top['extracted_inst'][:100]}")
             print(f"    Dataset Ground Truth  : {top['extracted_resp'][:120] if top['extracted_resp'] else 'N/A'}")
-            if "TRAIN" in top['split_status']:
+            has_train_leak = any(m["split_status"] == "IN_V0_TRAIN" for m in res["matches"])
+            if has_train_leak:
                 leak_count += 1
         else:
             print("    NO match found in dataset (ratio >= 80% or substring).")
@@ -225,11 +230,10 @@ def main():
     # Sort by row_id to ensure exact determinism across platforms
     deduped_rows.sort(key=lambda x: x["row_id"])
 
-    # Compute hash for each row based on row_id and normalized instruction
+    # Compute hash for each row based on row_id and salt only (independent of text normalization)
     hashed_items = []
     for r in deduped_rows:
-        inst = r.get("extracted_inst") or r.get("instruction") or ""
-        h = hashlib.sha256(f"s0_salt_{r['row_id']}_{normalize_text(inst)}".encode('utf-8')).hexdigest()
+        h = hashlib.sha256(f"s0_salt_{r['row_id']}".encode('utf-8')).hexdigest()
         hashed_items.append((h, r))
 
     # Sort deterministically by hash

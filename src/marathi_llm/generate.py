@@ -2,39 +2,69 @@
 
 import os
 import json
+import logging
 import argparse
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Set
 
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig, BitsAndBytesConfig
 from peft import PeftModel
+
+logger = logging.getLogger(__name__)
 
 
 def load_model_and_tokenizer(
     model_id: str,
     adapter_path: Optional[str] = None,
     device: str = "cuda:0",
-    prequantized: bool = True,
+    prequantized: Optional[bool] = None,
+    trust_remote_code: bool = False,
 ):
-    """Loads base model (in 4-bit) and optional LoRA adapter with left-padding tokenizer."""
+    """
+    Loads base model and optional LoRA adapter with left-padding tokenizer.
+    If adapter_path is provided, loads from local disk or Hugging Face Hub and verifies attachment.
+    """
     print(f"Loading tokenizer: {model_id}...")
-    tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=trust_remote_code)
     tokenizer.padding_side = "left"
+    tokenizer.truncation_side = "left"
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    print(f"Loading model: {model_id}...")
-    # Note: If checkpoint is pre-quantized (e.g. *-bnb-4bit), do not pass load_in_4bit=True
-    kwargs = {"device_map": device, "trust_remote_code": True}
+    # Check whether the checkpoint is pre-quantized (e.g. *-bnb-4bit)
+    if prequantized is None:
+        try:
+            cfg = AutoConfig.from_pretrained(model_id, trust_remote_code=trust_remote_code)
+            prequantized = getattr(cfg, "quantization_config", None) is not None
+        except Exception:
+            prequantized = "bnb-4bit" in model_id.lower() or "4bit" in model_id.lower()
+
+    print(f"Loading model: {model_id} (prequantized={prequantized})...")
+    kwargs = {"device_map": device, "trust_remote_code": trust_remote_code}
+
     if not prequantized:
-        kwargs["load_in_4bit"] = True
+        # Standardized 4-bit NF4 configuration matching Unsloth prequantized weights
+        kwargs["quantization_config"] = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_use_double_quant=True,
+        )
 
     model = AutoModelForCausalLM.from_pretrained(model_id, **kwargs)
 
-    if adapter_path and os.path.exists(adapter_path):
+    adapter_loaded = False
+    if adapter_path:
         print(f"Attaching LoRA adapter: {adapter_path}...")
-        model = PeftModel.from_pretrained(model, adapter_path)
+        try:
+            model = PeftModel.from_pretrained(model, adapter_path)
+            if not isinstance(model, PeftModel):
+                raise RuntimeError(f"Model was not wrapped as PeftModel after loading from {adapter_path}")
+            adapter_loaded = True
+            print(f"Successfully attached LoRA adapter from {adapter_path}")
+        except Exception as e:
+            raise RuntimeError(f"Failed to load LoRA adapter from '{adapter_path}': {e}") from e
 
     model.eval()
     return model, tokenizer
@@ -43,21 +73,47 @@ def load_model_and_tokenizer(
 def prepare_prompt(
     raw_prompt: str,
     tokenizer,
-    use_chat_template: bool = True,
+    prompt_format: str = "chat",
     system_prompt: Optional[str] = None,
 ) -> str:
-    """Formats prompt with the model's native chat template if enabled."""
-    if not use_chat_template or not hasattr(tokenizer, "apply_chat_template") or not tokenizer.chat_template:
+    """
+    Formats prompt according to prompt_format:
+    - 'chat': native chat template (with enable_thinking=False for Qwen3)
+    - 'alpaca_v0': legacy Alpaca training template
+    - 'raw': unchanged string
+    """
+    if prompt_format == "alpaca_v0":
+        return f"### सूचना:\n{raw_prompt}\n\n### उत्तर:\n"
+
+    if prompt_format == "raw" or not hasattr(tokenizer, "apply_chat_template") or not tokenizer.chat_template:
         return raw_prompt
 
+    # Default: 'chat' format
     messages = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
     messages.append({"role": "user", "content": raw_prompt})
 
-    # Disable thinking tokens for Qwen3 if applicable
     template_kwargs = {"tokenize": False, "add_generation_prompt": True}
-    return tokenizer.apply_chat_template(messages, **template_kwargs)
+    try:
+        # Explicitly disable Qwen3 thinking mode to avoid wasting generation tokens on <think>
+        return tokenizer.apply_chat_template(messages, enable_thinking=False, **template_kwargs)
+    except TypeError:
+        return tokenizer.apply_chat_template(messages, **template_kwargs)
+
+
+def get_all_eos_token_ids(model, tokenizer) -> Set[int]:
+    """Retrieves all valid EOS token IDs from generation config and tokenizer."""
+    eos_ids = set()
+    gen_config = getattr(model, "generation_config", None)
+    if gen_config and gen_config.eos_token_id is not None:
+        if isinstance(gen_config.eos_token_id, list):
+            eos_ids.update(gen_config.eos_token_id)
+        else:
+            eos_ids.add(gen_config.eos_token_id)
+    if tokenizer.eos_token_id is not None:
+        eos_ids.add(tokenizer.eos_token_id)
+    return eos_ids
 
 
 def generate_batch(
@@ -66,7 +122,7 @@ def generate_batch(
     items: List[Dict[str, Any]],
     batch_size: int = 4,
     max_new_tokens: int = 256,
-    use_chat_template: bool = True,
+    prompt_format: str = "chat",
     system_prompt: Optional[str] = None,
     device: str = "cuda:0",
 ) -> List[Dict[str, Any]]:
@@ -78,11 +134,17 @@ def generate_batch(
     if not items:
         return []
 
-    # Prepare formatted prompts
+    tokenizer.padding_side = "left"
+    tokenizer.truncation_side = "left"
+
+    eos_token_ids = get_all_eos_token_ids(model, tokenizer)
+    primary_eos_id = tokenizer.eos_token_id
+
+    # Format prompts
     formatted = []
     for idx, it in enumerate(items):
         raw_p = it.get("prompt", "")
-        p_text = prepare_prompt(raw_p, tokenizer, use_chat_template, system_prompt)
+        p_text = prepare_prompt(raw_p, tokenizer, prompt_format=prompt_format, system_prompt=system_prompt)
         formatted.append({
             "orig_idx": idx,
             "id": it.get("id", str(idx)),
@@ -95,9 +157,9 @@ def generate_batch(
     sorted_items = sorted(formatted, key=lambda x: (len(x["input_text"]), x["orig_idx"]))
 
     results_in_order = [None] * len(items)
-    eos_id = tokenizer.eos_token_id
-
     n_total = len(sorted_items)
+    truncated_count = 0
+
     for start in range(0, n_total, batch_size):
         chunk = sorted_items[start : min(start + batch_size, n_total)]
         batch_texts = [c["input_text"] for c in chunk]
@@ -110,36 +172,45 @@ def generate_batch(
             max_length=2048,
         ).to(device)
 
-        input_lengths = [int(mask.sum().item()) for mask in inputs["attention_mask"]]
+        # Check if left-truncation occurred
+        for t_idx, txt in enumerate(batch_texts):
+            raw_len = len(tokenizer.encode(txt, add_special_tokens=False))
+            if raw_len > 2048:
+                truncated_count += 1
 
         with torch.no_grad():
             outputs = model.generate(
                 **inputs,
                 max_new_tokens=max_new_tokens,
                 do_sample=False,
+                temperature=None,
+                top_p=None,
+                top_k=None,
                 repetition_penalty=1.0,
-                pad_token_id=eos_id,
+                pad_token_id=primary_eos_id,
             )
+
+        prefix_len = inputs["input_ids"].shape[1]
 
         for i, c in enumerate(chunk):
             full_seq = outputs[i]
-            # Since inputs are left-padded, new tokens begin at inputs["input_ids"].shape[1]
-            prefix_len = inputs["input_ids"].shape[1]
-            generated_ids = full_seq[prefix_len:]
+            generated_ids = full_seq[prefix_len:].tolist()
 
-            # Remove padding tokens from the end if any
-            if eos_id is not None and (generated_ids == eos_id).any():
+            # Find earliest occurrence of any valid EOS token ID
+            earliest_eos_idx = None
+            for idx_tok, tok_id in enumerate(generated_ids):
+                if tok_id in eos_token_ids:
+                    earliest_eos_idx = idx_tok
+                    break
+
+            if earliest_eos_idx is not None:
                 finish_reason = "eos"
-                # Slice up to first eos token
-                eos_indices = (generated_ids == eos_id).nonzero(as_tuple=True)[0]
-                first_eos = int(eos_indices[0].item())
-                trimmed_ids = generated_ids[: first_eos + 1]
-                n_new = len(trimmed_ids)
+                trimmed_ids = generated_ids[:earliest_eos_idx]
             else:
                 finish_reason = "length" if len(generated_ids) >= max_new_tokens else "eos"
                 trimmed_ids = generated_ids
-                n_new = len(trimmed_ids)
 
+            n_new = len(trimmed_ids)
             output_text = tokenizer.decode(trimmed_ids, skip_special_tokens=True).strip()
 
             record = {
@@ -155,6 +226,9 @@ def generate_batch(
         if (start // batch_size) % 25 == 0:
             print(f"Generated {min(start + batch_size, n_total)}/{n_total} items...")
 
+    if truncated_count > 0:
+        print(f"Warning: {truncated_count} prompts were left-truncated at max_length=2048.")
+
     return results_in_order
 
 
@@ -166,7 +240,7 @@ def main():
     parser.add_argument("--output", default="results/generations.jsonl")
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--max-new-tokens", type=int, default=256)
-    parser.add_argument("--no-chat-template", action="store_true")
+    parser.add_argument("--prompt-format", default="chat", choices=["chat", "alpaca_v0", "raw"])
     args = parser.parse_args()
 
     # Load input items
@@ -191,7 +265,7 @@ def main():
         items=items,
         batch_size=args.batch_size,
         max_new_tokens=args.max_new_tokens,
-        use_chat_template=not args.no_chat_template,
+        prompt_format=args.prompt_format,
     )
 
     out_p = Path(args.output)

@@ -30,6 +30,45 @@ def bootstrap_ci(
     }
 
 
+def bootstrap_corpus_chrf(
+    hypotheses: List[str],
+    references: List[str],
+    n_bootstraps: int = 1000,
+    ci: float = 0.95,
+    seed: int = 42,
+) -> Dict[str, float]:
+    """Computes corpus-level chrF++ and its non-parametric bootstrap confidence interval."""
+    import sacrebleu
+
+    if not hypotheses or len(hypotheses) != len(references):
+        return {"corpus_chrf": 0.0, "ci_low": 0.0, "ci_high": 0.0}
+
+    n = len(hypotheses)
+    base_score = float(sacrebleu.corpus_chrf(hypotheses, [references], word_order=2).score)
+
+    rng = np.random.default_rng(seed)
+    boot_scores = []
+    hyps_arr = np.array(hypotheses, dtype=object)
+    refs_arr = np.array(references, dtype=object)
+
+    for _ in range(n_bootstraps):
+        idxs = rng.integers(0, n, size=n)
+        sub_hyps = hyps_arr[idxs].tolist()
+        sub_refs = refs_arr[idxs].tolist()
+        s = sacrebleu.corpus_chrf(sub_hyps, [sub_refs], word_order=2).score
+        boot_scores.append(s)
+
+    alpha = (1.0 - ci) / 2.0
+    low = float(np.percentile(boot_scores, 100 * alpha))
+    high = float(np.percentile(boot_scores, 100 * (1.0 - alpha)))
+
+    return {
+        "corpus_chrf": base_score,
+        "ci_low": low,
+        "ci_high": high,
+    }
+
+
 def paired_bootstrap_ci(
     scores_a: List[float] | np.ndarray,
     scores_b: List[float] | np.ndarray,
@@ -97,6 +136,23 @@ def mcnemar_test(
     if total_discordant == 0:
         return {"statistic": 0.0, "p_value": 1.0, "b01": 0, "b10": 0}
 
+    # For small sample sizes (discordant pairs < 25), use exact binomial test
+    if total_discordant < 25:
+        try:
+            from scipy.stats import binomtest
+            res = binomtest(b01, n=total_discordant, p=0.5, alternative="two-sided")
+            p_val = float(res.pvalue)
+            stat = float(min(b01, b10))
+            return {
+                "statistic": stat,
+                "p_value": p_val,
+                "b01": b01,
+                "b10": b10,
+                "exact": True,
+            }
+        except ImportError:
+            pass
+
     diff = abs(b01 - b10)
     if continuity_correction:
         diff = max(0.0, diff - 1.0)
@@ -108,10 +164,8 @@ def mcnemar_test(
         from scipy.stats import chi2
         p_val = float(chi2.sf(stat, df=1))
     except ImportError:
-        # Approximate using normal distribution for standard case
         import math
         z = math.sqrt(stat)
-        # Erfc approximation for 2-tailed normal
         p_val = math.erfc(z / math.sqrt(2))
 
     return {
@@ -119,4 +173,5 @@ def mcnemar_test(
         "p_value": float(p_val),
         "b01": b01,
         "b10": b10,
+        "exact": False,
     }

@@ -14,6 +14,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import PeftModel
 
 from marathi_llm.eval.stats import bootstrap_ci
+from marathi_llm.generate import prepare_prompt
 
 
 OPTION_MAP = {
@@ -65,7 +66,7 @@ def evaluate_milu(
     dataset_name: str = "ai4bharat/MILU",
     split: str = "validation",
     batch_size: int = 2,
-    use_chat_template: bool = True,
+    prompt_format: str = "chat",
     device: str = "cuda:0",
 ) -> Dict[str, Any]:
     """Evaluates a model on MILU Marathi split using next-token logits over A-D."""
@@ -74,6 +75,7 @@ def evaluate_milu(
     print(f"Total questions in {split}: {len(ds)}")
 
     tokenizer.padding_side = "left"
+    tokenizer.truncation_side = "left"
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
@@ -83,6 +85,8 @@ def evaluate_milu(
     records = []
     correct_list = []
     predicted_letters = []
+    letter_masses = []
+    truncated_count = 0
 
     model.eval()
 
@@ -94,14 +98,12 @@ def evaluate_milu(
 
         for item in batch_slice:
             raw_prompt = format_milu_prompt(item)
-            if use_chat_template and hasattr(tokenizer, "apply_chat_template") and tokenizer.chat_template:
-                messages = [{"role": "user", "content": raw_prompt}]
-                chat_prompt = tokenizer.apply_chat_template(
-                    messages, tokenize=False, add_generation_prompt=True
-                )
-                prompts.append(chat_prompt)
-            else:
-                prompts.append(raw_prompt)
+            prompt_text = prepare_prompt(raw_prompt, tokenizer, prompt_format=prompt_format)
+            prompts.append(prompt_text)
+
+        for p in prompts:
+            if len(tokenizer.encode(p, add_special_tokens=False)) > 1024:
+                truncated_count += 1
 
         inputs = tokenizer(
             prompts,
@@ -112,26 +114,32 @@ def evaluate_milu(
         ).to(device)
 
         with torch.no_grad():
-            # Memory optimization: project only the final position hidden state through lm_head
-            if hasattr(model, "model") and hasattr(model, "lm_head"):
-                hidden = model.model(**inputs).last_hidden_state[:, -1:, :]
-                final_logits = model.lm_head(hidden)[:, 0, :]
-            else:
+            # Memory optimization: logits_to_keep=1 projects only the final token through lm_head
+            try:
+                outputs = model(**inputs, logits_to_keep=1)
+                final_logits = outputs.logits[:, -1, :]
+            except TypeError:
                 outputs = model(**inputs)
                 final_logits = outputs.logits[:, -1, :]
 
+        probs = torch.softmax(final_logits, dim=-1)
+
         for i, item in enumerate(batch_slice):
             sample_logits = final_logits[i]
+            sample_probs = probs[i]
             letter_scores = {}
             for letter in CHOICE_LETTERS:
                 tids = choice_token_ids[letter]
-                # Take max logit across candidate token IDs
                 letter_scores[letter] = float(max(sample_logits[tid].item() for tid in tids))
 
             predicted = max(CHOICE_LETTERS, key=lambda c: letter_scores[c])
             target_raw = str(item.get("target", "")).strip()
             target = OPTION_MAP.get(target_raw, target_raw.upper())
             is_correct = bool(predicted == target)
+
+            # Sum of probabilities across option letters
+            option_mass = float(sum(sample_probs[choice_token_ids[l][0]].item() for l in CHOICE_LETTERS))
+            letter_masses.append(option_mass)
 
             correct_list.append(1.0 if is_correct else 0.0)
             predicted_letters.append(predicted)
@@ -144,10 +152,14 @@ def evaluate_milu(
                 "predicted": predicted,
                 "correct": is_correct,
                 "scores": letter_scores,
+                "option_letters_prob_mass": option_mass,
             })
 
         if (start_idx // batch_size) % 20 == 0:
             print(f"Processed {len(records)}/{n_items} questions...")
+
+    if truncated_count > 0:
+        print(f"Warning: {truncated_count} MILU prompts were left-truncated at max_length=1024.")
 
     # Calculate statistics
     overall_ci = bootstrap_ci(correct_list)
@@ -181,6 +193,7 @@ def evaluate_milu(
         "accuracy": accuracy,
         "ci_95": [float(overall_ci["ci_low"] * 100.0), float(overall_ci["ci_high"] * 100.0)],
         "chance_level": 25.0,
+        "mean_option_letters_prob_mass": float(np.mean(letter_masses)),
         "predicted_letter_distribution": letter_dist,
         "domain_accuracy": domain_results,
     }

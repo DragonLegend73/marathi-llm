@@ -33,11 +33,13 @@ def is_devanagari_char(c):
     return '\u0900' <= c <= '\u097F'
 
 def compute_script_purity(text):
-    letters = [c for c in text if c.isalpha()]
-    if not letters:
+    if not text:
         return 0.0
-    deva_count = sum(1 for c in letters if is_devanagari_char(c))
-    return deva_count / len(letters)
+    chars = [c for c in text if not c.isspace() and not unicodedata.category(c).startswith("P")]
+    if not chars:
+        return 0.0
+    deva_count = sum(1 for c in chars if is_devanagari_char(c))
+    return deva_count / len(chars)
 
 def main():
     print("Loading test split IDs from data/splits/s0_test_200.json...")

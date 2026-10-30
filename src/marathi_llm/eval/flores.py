@@ -11,7 +11,7 @@ import sacrebleu
 from huggingface_hub import hf_hub_download
 
 from marathi_llm.generate import load_model_and_tokenizer, generate_batch
-from marathi_llm.eval.stats import bootstrap_ci
+from marathi_llm.eval.stats import bootstrap_ci, bootstrap_corpus_chrf
 from marathi_llm.eval.auto_metrics import compute_script_purity
 
 
@@ -62,7 +62,7 @@ def evaluate_flores_direction(
     split: str = "dev",
     batch_size: int = 4,
     max_new_tokens: int = 256,
-    use_chat_template: bool = True,
+    prompt_format: str = "chat",
     device: str = "cuda:0",
 ) -> Dict[str, Any]:
     """Evaluates a single Flores-IN direction."""
@@ -75,7 +75,7 @@ def evaluate_flores_direction(
         items=items,
         batch_size=batch_size,
         max_new_tokens=max_new_tokens,
-        use_chat_template=use_chat_template,
+        prompt_format=prompt_format,
         device=device,
     )
 
@@ -91,18 +91,19 @@ def evaluate_flores_direction(
         if direction == "en_mr":
             purities.append(compute_script_purity(h))
 
-    # Corpus chrF++
-    corpus_chrf = sacrebleu.corpus_chrf(hypotheses, [references], word_order=2).score
-    ci = bootstrap_ci(sentence_scores)
+    # Bootstrap corpus chrF++ directly
+    chrf_res = bootstrap_corpus_chrf(hypotheses, references)
+    sentence_ci = bootstrap_ci(sentence_scores)
 
     summary = {
         "benchmark": "Flores-IN",
         "direction": direction,
         "split": split,
         "n_samples": len(items),
-        "corpus_chrf_pp": float(corpus_chrf),
-        "mean_sentence_chrf_pp": float(ci["mean"]),
-        "ci_95": [float(ci["ci_low"]), float(ci["ci_high"])],
+        "corpus_chrf_pp": float(chrf_res["corpus_chrf"]),
+        "ci_95": [float(chrf_res["ci_low"]), float(chrf_res["ci_high"])],
+        "mean_sentence_chrf_pp": float(sentence_ci["mean"]),
+        "sentence_ci_95": [float(sentence_ci["ci_low"]), float(sentence_ci["ci_high"])],
     }
 
     if purities:
@@ -114,6 +115,7 @@ def evaluate_flores_direction(
             "id": g["id"],
             "source": g["source"],
             "target": g["target"],
+            "output": g["output"],
             "generation": g["output"],
             "finish_reason": g["finish_reason"],
             "n_new_tokens": g["n_new_tokens"],
@@ -152,9 +154,9 @@ def main():
         print(f"\n[{d.upper()}] Corpus chrF++: {s['corpus_chrf_pp']:.2f} | Mean: {s['mean_sentence_chrf_pp']:.2f} (95% CI: [{s['ci_95'][0]:.2f}, {s['ci_95'][1]:.2f}])")
 
         with open(out_dir / f"flores_{d}_{args.split}_summary.json", "w", encoding="utf-8") as f:
-            json.dump(s, f, indent=2)
+            json.dump(s, f, indent=2, ensure_ascii=False)
         with open(out_dir / f"flores_{d}_{args.split}_records.json", "w", encoding="utf-8") as f:
-            json.dump(res["records"], f, indent=2)
+            json.dump(res["records"], f, indent=2, ensure_ascii=False)
 
 
 if __name__ == "__main__":

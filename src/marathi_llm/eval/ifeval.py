@@ -1,6 +1,7 @@
 """Wrapper for running IndicIFEval (Trans and Ground) instruction-following evaluation via lm-eval."""
 
 import os
+import sys
 import json
 import subprocess
 import argparse
@@ -14,6 +15,7 @@ def run_indicifeval(
     output_dir: str = "results/ifeval",
     tasks: str = "indicifeval_ground_mr,indicifeval_trans_mr",
     include_path: str = "IndicIFEval/lm-evaluation-harness/custom_configs",
+    prequantized: bool = True,
     limit: Optional[int] = None,
     device: str = "cuda:0",
     batch_size: int = 1,
@@ -25,12 +27,16 @@ def run_indicifeval(
     out_path.mkdir(parents=True, exist_ok=True)
 
     # Build model arguments
-    model_args = f"pretrained={model_id},trust_remote_code=True"
+    model_args_list = [f"pretrained={model_id}", "trust_remote_code=True"]
+    if not prequantized:
+        model_args_list.append("load_in_4bit=True")
     if adapter_path:
-        model_args += f",peft={adapter_path}"
+        model_args_list.append(f"peft={adapter_path}")
+
+    model_args = ",".join(model_args_list)
 
     cmd = [
-        ".venv/bin/lm_eval",
+        sys.executable, "-m", "lm_eval",
         "--model", "hf",
         "--model_args", model_args,
         "--tasks", tasks,
@@ -38,40 +44,58 @@ def run_indicifeval(
         "--batch_size", str(batch_size),
         "--device", device,
         "--apply_chat_template",
+        "--log_samples",
         "--output_path", str(out_path),
     ]
 
     if limit is not None:
         cmd.extend(["--limit", str(limit)])
 
-    print(f"Running command: {' '.join(cmd)}")
+    print(f"Running IndicIFEval command: {' '.join(cmd)}")
     result = subprocess.run(cmd, capture_output=True, text=True)
 
     if result.returncode != 0:
         print("STDOUT:\n", result.stdout)
         print("STDERR:\n", result.stderr)
-        raise RuntimeError(f"lm_eval failed with returncode {result.returncode}")
+        raise RuntimeError(f"lm_eval failed with returncode {result.returncode}:\n{result.stderr}")
 
     # Look for the generated output JSON in out_path
     json_files = list(out_path.glob("**/results*.json"))
     if not json_files:
-        # Check files directly in out_path
         json_files = list(out_path.glob("*.json"))
 
-    parsed_metrics = {}
-    if json_files:
-        latest_file = max(json_files, key=lambda p: p.stat().st_mtime)
-        with open(latest_file, "r", encoding="utf-8") as f:
-            raw_res = json.load(f)
+    if not json_files:
+        raise FileNotFoundError(f"No results JSON found in {out_path} after lm_eval execution.")
 
-        results_by_task = raw_res.get("results", {})
-        for task_name, task_metrics in results_by_task.items():
-            parsed_metrics[task_name] = {
-                "prompt_level_strict_acc": float(task_metrics.get("prompt_level_strict_acc,none", 0.0) * 100.0),
-                "prompt_level_loose_acc": float(task_metrics.get("prompt_level_loose_acc,none", 0.0) * 100.0),
-                "inst_level_strict_acc": float(task_metrics.get("inst_level_strict_acc,none", 0.0) * 100.0),
-                "inst_level_loose_acc": float(task_metrics.get("inst_level_loose_acc,none", 0.0) * 100.0),
-            }
+    latest_file = max(json_files, key=lambda p: p.stat().st_mtime)
+    with open(latest_file, "r", encoding="utf-8") as f:
+        raw_res = json.load(f)
+
+    results_by_task = raw_res.get("results", {})
+    parsed_metrics = {
+        "max_gen_toks": 1280,
+    }
+
+    for task_name, task_metrics in results_by_task.items():
+        # Short key for Appendix B schema compatibility
+        short_key = "trans_mr" if "trans" in task_name else ("ground_mr" if "ground" in task_name else task_name)
+
+        def get_metric(metric_name):
+            val = task_metrics.get(f"{metric_name},none")
+            if val is None:
+                val = task_metrics.get(metric_name)
+            if val is None:
+                raise KeyError(f"Metric '{metric_name}' not found in task '{task_name}' results: {list(task_metrics.keys())}")
+            return float(val * 100.0)
+
+        task_data = {
+            "prompt_level_strict_acc": get_metric("prompt_level_strict_acc"),
+            "prompt_level_loose_acc": get_metric("prompt_level_loose_acc"),
+            "inst_level_strict_acc": get_metric("inst_level_strict_acc"),
+            "inst_level_loose_acc": get_metric("inst_level_loose_acc"),
+        }
+        parsed_metrics[short_key] = task_data
+        parsed_metrics[task_name] = task_data
 
     summary_file = out_path / "ifeval_summary.json"
     with open(summary_file, "w", encoding="utf-8") as f:
@@ -86,6 +110,7 @@ def main():
     parser.add_argument("--adapter", default=None)
     parser.add_argument("--tasks", default="indicifeval_ground_mr,indicifeval_trans_mr")
     parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--prequantized", action="store_true", default=True)
     parser.add_argument("--output-dir", default="results/ifeval")
     args = parser.parse_args()
 
@@ -94,16 +119,19 @@ def main():
         adapter_path=args.adapter,
         output_dir=args.output_dir,
         tasks=args.tasks,
+        prequantized=args.prequantized,
         limit=args.limit,
     )
 
     print("\n--- IndicIFEval Results ---")
-    for tname, m in metrics.items():
-        print(f"\nTask: {tname}")
-        print(f"  Prompt Strict Acc: {m['prompt_level_strict_acc']:.2f}%")
-        print(f"  Prompt Loose Acc:  {m['prompt_level_loose_acc']:.2f}%")
-        print(f"  Inst Strict Acc:   {m['inst_level_strict_acc']:.2f}%")
-        print(f"  Inst Loose Acc:    {m['inst_level_loose_acc']:.2f}%")
+    for key in ["ground_mr", "trans_mr"]:
+        if key in metrics:
+            m = metrics[key]
+            print(f"\nTask: {key}")
+            print(f"  Prompt Strict Acc: {m['prompt_level_strict_acc']:.2f}%")
+            print(f"  Prompt Loose Acc:  {m['prompt_level_loose_acc']:.2f}%")
+            print(f"  Inst Strict Acc:   {m['inst_level_strict_acc']:.2f}%")
+            print(f"  Inst Loose Acc:    {m['inst_level_loose_acc']:.2f}%")
 
 
 if __name__ == "__main__":
