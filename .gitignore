@@ -30,3 +30,13 @@ unsloth_compiled_cache/
 
 #ollama model
 outputs_gguf/
+
+# Data artifacts
+data/raw/
+data/processed/*.jsonl
+
+# Environment secrets
+.env
+
+# Planning files
+plan*.md

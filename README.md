@@ -1,14 +1,32 @@
 # मराठी LLM Fine-Tuning — Marathi Language Model
 
-> Fine-tuning **Qwen2.5-1.5B-Instruct** on a Marathi Alpaca instruction dataset using **QLoRA + Unsloth** on consumer-grade hardware.
+> Fine-tuning and evaluating Marathi language models under a **4 GB VRAM budget** (RTX 3050 Ti Laptop GPU) using **QLoRA + Unsloth**.
 
 ---
 
-## Overview
+## ⚠️ Baseline Audit & Revised Results
 
-Marathi is spoken by over 83 million people but remains significantly under-represented in modern LLMs. This project demonstrates that parameter-efficient fine-tuning (QLoRA) can meaningfully improve Marathi language generation in a small LLM — using only a 4 GB VRAM laptop GPU.
+> [!IMPORTANT]
+> **Evaluation Audit Notice (October 2026):**
+> An audit of the initial (v0) release revealed that **4 of the 10 original test prompts were present in the training split** (including Row 0 and Row 1 of the dataset). The previously reported headline improvement of **+10.44 chrF++ points** was inflated by direct memorization of these training examples.
+>
+> Full audit findings and methodology are documented in [`docs/legacy/leakage_audit.md`](docs/legacy/leakage_audit.md). The original v0 documentation is preserved in [`docs/legacy/v0_baseline.md`](docs/legacy/v0_baseline.md).
 
-**Key result:** Corpus chrF++ improved from **15.39 → 25.83** (+10.44 points) over the base model across 10 Marathi prompts. The base model produces incoherent, language-mixed output; the fine-tuned model consistently generates structured Marathi prose.
+### Honest Re-Evaluation on 200 Clean Held-Out Prompts
+
+Both the base model (`Qwen2.5-1.5B-Instruct-bnb-4bit`) and the published v0 adapter (`DragonLegend/marathi-qwen2.5-lora`) were re-evaluated on a **strictly held-out test split of 200 unseen Marathi prompts** (`data/splits/s0_test_200.json`) with deterministic greedy decoding:
+
+| Metric | Base Model (`Qwen2.5-1.5B`) | Fine-Tuned v0 Adapter | Measured Delta (Δ) | Original v0 Claim |
+|---|---|---|---|---|
+| **Corpus chrF++** | 17.75 | **22.37** | **+4.62** | *+10.44 (inflated by leakage)* |
+| **EOS Rate (%)** | 1.00% | **81.50%** | **+80.50%** | *Not measured* |
+| **Script Purity (%)** | **95.88%** | 93.69% | -2.20% | *Not measured* |
+| **Mean Output Length** | 255.6 tokens | **123.6 tokens** | -131.9 tokens | *Not measured* |
+
+### What the Audit Revealed
+1. **The chrF++ gain is real but halved (+4.62 vs +10.44):** The model does produce better Marathi prose than base Qwen, but the massive +33.07 and +25.06 deltas in v0 were due to testing on Row 0, Row 1, and Row 37982 of the training data.
+2. **The real win is conversational termination (+80.5% EOS Rate):** Base Qwen almost never stopped in Marathi (rambling to the 256-token limit 99% of the time). Fine-tuning taught the model how and when to end a Marathi response naturally.
+3. **Hardware validation (4 GB VRAM):** 100-step training profiling verified peak allocated VRAM of **1.38 GB** (1.45 GB reserved) at **0.249 steps/s (~1.99 samples/s)** on the RTX 3050 Ti laptop GPU with stable 59 °C thermals (`results/hw_profile.json`).
 
 ---
 
@@ -16,186 +34,73 @@ Marathi is spoken by over 83 million people but remains significantly under-repr
 
 | Component | Details |
 |---|---|
-| GPU | NVIDIA RTX 3050 Ti Laptop (4 GB VRAM) |
-| OS | Bazzite Linux |
-| Training env | Distrobox (Ubuntu) with CUDA passthrough |
-| Inference | Ollama (host) |
+| GPU | NVIDIA GeForce RTX 3050 Ti Laptop GPU (4 GB VRAM) |
+| Host OS | CachyOS / Linux |
+| Python Environment | Python 3.12 managed via `uv` (`.venv`) |
+| Core Stack | PyTorch 2.14.1+cu132, Unsloth 2026.10, Transformers 5.17, TRL 1.15, PEFT 0.21 |
+| Public Adapter | [DragonLegend/marathi-qwen2.5-lora](https://huggingface.co/DragonLegend/marathi-qwen2.5-lora) |
 
 ---
 
-## Model Details
+## Upgrade Plan & Roadmap
 
-| | |
-|---|---|
-| **Base model** | `unsloth/Qwen2.5-1.5B-Instruct-bnb-4bit` |
-| **Dataset** | [`rachittshah/alpaca-marahti`](https://huggingface.co/datasets/rachittshah/alpaca-marahti) |
-| **Dataset size** | 52,002 samples (34,499 after filtering) |
-| **Method** | QLoRA — LoRA r=16, alpha=32 |
-| **Epochs** | 1 (4,097 optimizer steps) |
-| **Final val loss** | 0.4479 |
-| **Adapter** | [DragonLegend/marathi-qwen2.5-lora](https://huggingface.co/DragonLegend/marathi-qwen2.5-lora) |
+We are upgrading this project from a single-dataset fine-tune into an end-to-end reproducible research study:
 
----
-
-## Results
-
-### Training Loss Curve
-
-![Loss Curve](evals/loss_curve.png)
-
-Training loss dropped from **1.36 → 0.46** over 4,097 steps. Validation loss tracked closely with no overfitting.
-
-### chrF++ Evaluation
-
-| Prompt | Base | Fine-Tuned | Δ |
-|---|---|---|---|
-| निरोगी राहण्यासाठी तीन टिप्स द्या. | 17.92 | 28.25 | +10.33 |
-| तीन मुख्य रंग कोणते आहेत? | 9.57 | 42.65 | +33.07 |
-| पाण्याचे महत्त्व सांगा. | 11.89 | 22.34 | +10.45 |
-| भारताची राजधानी कोणती आहे? | 21.84 | 46.90 | +25.06 |
-| सूर्यमाला म्हणजे काय? | 12.18 | 16.46 | +4.28 |
-| मित्राला पत्र कसे लिहावे? | 14.62 | 17.31 | +2.69 |
-| झाडे लावणे का महत्त्वाचे आहे? | 11.83 | 20.43 | +8.60 |
-| संगणक म्हणजे काय आणि त्याचा उपयोग काय? | 17.41 | 20.22 | +2.81 |
-| वेळेचे व्यवस्थापन कसे करावे? | 21.77 | 25.49 | +3.72 |
-| चांगल्या विद्यार्थ्याचे गुण कोणते असतात? | 14.84 | 18.24 | +3.40 |
-| **Corpus Average** | **15.39** | **25.83** | **+10.44** |
+- [x] **Phase 0 — Baseline Audit & Clean Splits**: Audit train/test contamination, document leakage, generate deterministic hash split manifests (`data/splits/`), profile hardware.
+- [ ] **Phase 1 — Rigorous Evaluation Harness**: Native MCQ benchmark (MILU - Marathi), standard generation benchmarks (IndicGenBench Flores-IN translation & XQuAD-IN QA), verifiable instruction-following (IndicIFEval), held-out bits-per-character (BPC), and English regression checks.
+- [ ] **Phase 2 — Data Pipeline**: Ingest and clean diverse Marathi sources (S0: Alpaca, S1: IndicAlign, S2: SandLogic, S3: Aya) with strict decontamination against all eval sets.
+- [ ] **Phase 3 — Model Selection (Stage A)**: Benchmark candidate base models (Qwen2.5-1.5B, Qwen3-1.7B, Gemma-3-1B, Llama-3.2-1B) under equal training budgets.
+- [ ] **Phase 4 — Data Selection (Stage B)**: Compare data sources and construct data scaling curves.
+- [ ] **Phase 5 — Final Training & Ablations (Stage C)**: Noise-floor measurement across random seeds, response-only loss masking ablations, and final model release.
 
 ---
 
-## Project Structure
+## Repository Structure
 
 ```
 marathi-llm/
-├── config.py            # Single source of truth for all hyperparameters
-├── train.py             # QLoRA fine-tuning with Unsloth + SFTTrainer
-├── check_dataset.py     # Dataset inspection and token length analysis
-├── plot_loss.py         # Training vs validation loss curve
-├── infer.py             # Base vs fine-tuned side-by-side comparison
-├── evaluate.py          # chrF++ scoring (requires sacrebleu)
-├── chat.py              # Interactive terminal chat with fine-tuned model
-└── export_gguf.py       # Merge adapter + export to GGUF for Ollama
+├── configs/             # Model, data, and training YAML configs
+├── data/
+│   ├── splits/          # Committed split manifests (s0_test_ids.json, etc.)
+│   └── eval/            # Eval prompt suites
+├── docs/
+│   └── legacy/          # v0 baseline numbers and leakage audit
+│       ├── v0_baseline.md
+│       └── leakage_audit.md
+├── results/
+│   ├── hw_profile.json  # VRAM, throughput, and thermal profile
+│   └── v0_rescore.json  # Re-evaluation on 200 unseen prompts
+├── scripts/             # Audit, profiling, and evaluation runners
+├── src/marathi_llm/     # Package source (data, eval, train, aggregate)
+├── requirements.lock    # Pinned dependency lockfile
+└── plan.md              # Detailed upgrade plan
 ```
 
 ---
 
-## Setup
+## Setup & Quickstart
 
-### Requirements
-
-```bash
-# Inside distrobox (training)
-pip install unsloth trl transformers datasets sacrebleu
-
-# On host (Ollama chat)
-# Install Ollama: https://ollama.com
-```
-
-### Installation
+### 1. Environment Setup (using `uv`)
 
 ```bash
-git clone https://github.com/DragonLegend73/marathi-llm.git
-cd marathi-llm
-pip install unsloth trl transformers datasets sacrebleu
+# Activate virtual environment
+# In fish:
+source .venv/bin/activate.fish
+
+# In bash/zsh:
+source .venv/bin/activate
 ```
 
----
+### 2. Verify GPU & Stack
 
-## Usage
-
-### 1. Inspect the dataset
 ```bash
-python check_dataset.py
+python -c "import torch, unsloth; print(torch.cuda.get_device_name(0), 'ready!')"
 ```
-Prints token length distribution and sample rows from the Marathi dataset.
 
-### 2. Fine-tune
+### 3. Re-run Audit & Profiling
+
 ```bash
-python train.py
+python scripts/audit_baseline.py
+python scripts/rescore_v0.py
+python scripts/profile_hardware.py
 ```
-Trains for 1 epoch using QLoRA. Saves LoRA adapter to `./outputs/lora_adapter/` and loss log to `./evals/loss_log.csv`.
-
-### 3. Plot loss curve
-```bash
-python plot_loss.py
-```
-Generates `evals/loss_curve.png` showing training and validation loss.
-
-### 4. Compare base vs fine-tuned
-```bash
-python infer.py
-```
-Runs 10 Marathi prompts through both models and saves `evals/comparison.csv`.
-
-### 5. Compute chrF++ scores
-```bash
-python evaluate.py
-```
-Requires `evals/comparison.csv` from `infer.py`. Saves `evals/scores.csv`.
-
-### 6. Chat in terminal
-```bash
-python chat.py
-```
-Interactive Marathi chat using the fine-tuned LoRA adapter.
-
-### 7. Export to Ollama
-```bash
-python export_gguf.py
-cd outputs_gguf
-ollama create marathi-llm -f Modelfile
-ollama run marathi-llm
-```
-
----
-
-## Key Design Decisions
-
-**Why Qwen2.5-1.5B over Llama-3.2-3B?** Qwen2.5 has stronger multilingual pretraining coverage and fits in 4 GB VRAM at 4-bit quantisation. Llama's English-dominant corpus provides a weaker Marathi baseline.
-
-**Why `LORA_DROPOUT=0`?** Unsloth disables its fast kernel patching when dropout > 0, which causes 0 LoRA layers to be patched and kills fine-tuning effectiveness.
-
-**Why `MAX_SEQ_LEN=512`?** Devanagari script tokenises at ~5× the token count of equivalent English text. p90 of the dataset is 781 tokens. Testing at 768 and 640 caused OOM on the RTX 3050 Ti. 512 filtered 33.7% of samples but kept training stable.
-
-**Why `translated_text` column?** The dataset contains both original English (`instruction`/`output`) and a pre-formatted Marathi translation (`translated_text`). Training on the English columns would fine-tune on English, defeating the purpose.
-
----
-
-## Limitations
-
-- **Factual accuracy** — the model learned Marathi fluency, not factual grounding. Some factual answers are incorrect.
-- **Sequence truncation** — 33.7% of samples were filtered at 512 tokens, biasing training toward shorter responses.
-- **Single epoch** — hardware constraints limited training to 1 epoch.
-- **chrF++ reference sensitivity** — semantically correct but differently phrased outputs score lower than deserved.
-
----
-
-## Hugging Face
-
-The trained LoRA adapter is publicly available:
-
-👉 [DragonLegend/marathi-qwen2.5-lora](https://huggingface.co/DragonLegend/marathi-qwen2.5-lora)
-
-```python
-from peft import PeftModel
-from unsloth import FastLanguageModel
-import torch
-
-model, tokenizer = FastLanguageModel.from_pretrained(
-    model_name="unsloth/Qwen2.5-1.5B-Instruct-bnb-4bit",
-    max_seq_length=512,
-    dtype=torch.float16,
-    load_in_4bit=True,
-)
-model = PeftModel.from_pretrained(model, "DragonLegend/marathi-qwen2.5-lora")
-```
-
----
-
-## References
-
-- Dettmers et al. (2023). *QLoRA: Efficient Finetuning of Quantized LLMs.* NeurIPS 2023.
-- Hu et al. (2022). *LoRA: Low-Rank Adaptation of Large Language Models.* ICLR 2022.
-- Popovic (2017). *chrF++: Words Helping Character N-grams.* WMT 2017.
-- [Unsloth](https://github.com/unslothai/unsloth) — 2× faster LLM fine-tuning.
-- [rachittshah/alpaca-marahti](https://huggingface.co/datasets/rachittshah/alpaca-marahti) — Marathi Alpaca dataset.

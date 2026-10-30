@@ -1,0 +1,194 @@
+{
+  "dataset_name": "rachittshah/alpaca-marahti",
+  "total_raw": 52002,
+  "v0_filtered_count": 34499,
+  "v0_train_count": 32774,
+  "v0_eval_count": 1725,
+  "leak_count": 4,
+  "prompts_audit": [
+    {
+      "idx": 1,
+      "prompt": "निरोगी राहण्यासाठी तीन टिप्स द्या.",
+      "eval_reference": "1. संतुलित आहार घ्या आणि भरपूर फळे आणि भाज्या खा. 2. नियमित व्यायाम करा. 3. पुरेशी झोप घ्या.",
+      "matches": [
+        {
+          "row_id": 0,
+          "split_status": "IN_V0_TRAIN",
+          "token_len": 318,
+          "fuzz_ratio": 100.0,
+          "extracted_inst": "निरोगी राहण्यासाठी तीन टिप्स द्या.",
+          "extracted_resp": "1. संतुलित आहार घ्या आणि भरपूर फळे आणि भाज्यांचा समावेश करा. \n2. आपले शरीर सक्रिय आणि मजबूत ठेवण्यासाठी नियमित व्यायाम करा. \n3. पुरेशी झोप घ्या आणि झोपेचे सातत्यपूर्ण वेळापत्रक ठेवा.",
+          "raw_output": "1.Eat a balanced diet and make sure to include plenty of fruits and vegetables. \n2. Exercise regularly to keep your body active and strong. \n3. Get enough sleep and maintain a consistent sleep schedule."
+        },
+        {
+          "row_id": 30129,
+          "split_status": "IN_V0_TRAIN",
+          "token_len": 363,
+          "fuzz_ratio": 88.37209302325581,
+          "extracted_inst": "निरोगी आहार घेण्यासाठी तीन टिप्स द्या.",
+          "extracted_resp": "निरोगी आहार ठेवण्यासाठी येथे तीन टिपा आहेत:\n1. दररोज विविध प्रकारची फळे आणि भाज्या खा.\n2. मासे, कुक्कुटपालन आणि शेंगदाणे यासारख्या पातळ प्रथिनांचा समावेश करण्याची खात्री करा.\n3. पुरेसे पाणी पिण्याची खात्री करा आणि साखरयुक्त पेये टाळा.",
+          "raw_output": "Here are three tips for keeping a healthy diet:\n1. Eat a variety of fruits and vegetables every day.\n2. Make sure to include lean proteins like fish, poultry, and legumes.\n3. Make sure to drink enough water and avoid sugary drinks."
+        },
+        {
+          "row_id": 30057,
+          "split_status": "IN_V0_TRAIN",
+          "token_len": 331,
+          "fuzz_ratio": 82.05128205128204,
+          "extracted_inst": "निरोगी खाण्यासाठी पाच टिप्स द्या.",
+          "extracted_resp": "१. भरपूर फळे आणि भाज्या खा. \n२. प्रक्रिया केलेले पदार्थ खाणे टाळा. \n3. साखर आणि मीठाचे सेवन मर्यादित करा.\n4. मासे, कुक्कुटपालन आणि शेंगदाणे यासारख्या पातळ प्रथिनांचे सेवन करा. \n५. दिवसभर भरपूर पाणी प्यावे.",
+          "raw_output": "1. Eat plenty of fruits and vegetables. \n2. Avoid eating processed foods. \n3. Limit your intake of sugar and salt.\n4. Consume lean proteins such as fish, poultry, and legumes. \n5. Drink plenty of water throughout the day."
+        }
+      ]
+    },
+    {
+      "idx": 2,
+      "prompt": "तीन मुख्य रंग कोणते आहेत?",
+      "eval_reference": "लाल, निळा आणि पिवळा असे तीन प्राथमिक रंग आहेत.",
+      "matches": [
+        {
+          "row_id": 1,
+          "split_status": "IN_V0_TRAIN",
+          "token_len": 177,
+          "fuzz_ratio": 100.0,
+          "extracted_inst": "तीन मुख्य रंग कोणते आहेत?",
+          "extracted_resp": "लाल, निळा आणि पिवळा असे तीन प्राथमिक रंग आहेत.",
+          "raw_output": "The three primary colors are red, blue, and yellow."
+        },
+        {
+          "row_id": 10460,
+          "split_status": "IN_V0_TRAIN",
+          "token_len": 246,
+          "fuzz_ratio": 35.71428571428571,
+          "extracted_inst": "योग्य उत्तर शोधा",
+          "extracted_resp": "लाल, निळा आणि पिवळा असे तीन प्राथमिक रंग आहेत.",
+          "raw_output": "The three primary colors are red, blue, and yellow."
+        }
+      ]
+    },
+    {
+      "idx": 3,
+      "prompt": "पाण्याचे महत्त्व सांगा.",
+      "eval_reference": "पाणी जीवनासाठी अत्यंत आवश्यक आहे. ते शरीरातील पेशींना कार्यक्षम ठेवते आणि पचनक्रिया सुधारते.",
+      "matches": [
+        {
+          "row_id": 18278,
+          "split_status": "dropped_by_length",
+          "token_len": 657,
+          "fuzz_ratio": 81.25,
+          "extracted_inst": "मानवासाठी पाण्याचे महत्त्व सांगा.",
+          "extracted_resp": "पाणी जीवनासाठी आवश्यक आहे आणि आपल्या शारीरिक आणि मानसिक आरोग्यासाठी आवश्यक आहे. हे आपल्या शरीराचे तापमान नियमित करण्यास मदत करते, रक्तदाब राखण्यास मदत करते आणि पचन, शोषण आणि पोषक द्रव्यांच्या वाहतुकीसाठी आवश्यक आहे. हे आपल्या शरीरातील कचरा काढून टाकण्यास आणि आपले सांधे आणि अवयव वंगण करण्यास मदत करते. मेंदूच्या योग्य कार्यासाठी पाणी देखील महत्वाचे आहे आणि आपल्या उर्जेची पातळी राखण्यास मदत करते. याव्यतिरिक्त, पाणी आपली त्वचा हायड्रेटेड ठेवण्यास आणि निरोगी दिसण्यास मदत करते. त्यामुळे चांगले आणि निरोगी राहण्यासाठी भरपूर पाणी पिणे आवश्यक आहे.",
+          "raw_output": "Water is essential for life, and is vital for our physical and mental health. It helps regulate our body temperature, helps maintain our blood pressure, and is necessary for digestion, absorption and transportation of nutrients. It helps to remove waste from our bodies, and to lubricate our joints and organs. Water is also important for proper brain functioning and helps to maintain our energy levels. In addition, water helps to keep our skin hydrated and looking healthy. Therefore, it is essential to drink plenty of water to stay well and healthy."
+        },
+        {
+          "row_id": 10004,
+          "split_status": "IN_V0_TRAIN",
+          "token_len": 432,
+          "fuzz_ratio": 68.42105263157895,
+          "extracted_inst": "पाण्याचे महत्त्व सांगणारी काही वाक्ये लिहा",
+          "extracted_resp": "पाणी पृथ्वीवरील सर्वात आवश्यक पदार्थांपैकी एक आहे, कारण ते सर्व सजीवांसाठी आवश्यक आहे. पाण्याशिवाय पृथ्वीवरील जीवसृष्टी शक्य च नाही. निरोगी शरीरासाठी पाणी देखील आवश्यक आहे, शरीराला आवश्यक हायड्रेशन, पोषण आणि खनिजे प्रदान करते. हायड्रेटेड आणि निरोगी राहण्यासाठी दिवसभर भरपूर पाणी पिणे महत्वाचे आहे.",
+          "raw_output": "Water is one of the most essential substances on Earth, because it is essential for all living organisms. Without water, life on Earth would not be possible. Water is also essential for healthy bodies, providing essential hydration, nourishment, and minerals to the body. It is important to drink plenty of water throughout the day to stay hydrated and healthy."
+        },
+        {
+          "row_id": 870,
+          "split_status": "IN_V0_TRAIN",
+          "token_len": 289,
+          "fuzz_ratio": 24.0,
+          "extracted_inst": "या ब्लॉग पोस्टचे मूल्यमापन करा. आउटपुट \"चांगले\" किंवा \"वाईट\".",
+          "extracted_resp": "चांगला",
+          "raw_output": "good"
+        }
+      ]
+    },
+    {
+      "idx": 4,
+      "prompt": "भारताची राजधानी कोणती आहे?",
+      "eval_reference": "भारताची राजधानी नवी दिल्ली आहे.",
+      "matches": [
+        {
+          "row_id": 37982,
+          "split_status": "IN_V0_TRAIN",
+          "token_len": 190,
+          "fuzz_ratio": 65.3061224489796,
+          "extracted_inst": "एका प्रश्नाचे उत्तर द्या - भारताची राजधानी कोणती आहे?",
+          "extracted_resp": "भारताची राजधानी नवी दिल्ली आहे.",
+          "raw_output": "The capital of India is New Delhi."
+        },
+        {
+          "row_id": 9169,
+          "split_status": "IN_V0_TRAIN",
+          "token_len": 263,
+          "fuzz_ratio": 45.714285714285715,
+          "extracted_inst": "खालील प्रश्नांच्या उत्तरासह प्रश्नमंजुषा प्रश्न तयार करा: भारताची राजधानी कोणती आहे",
+          "extracted_resp": "भारताची राजधानी कोणती?\nए. दिल्ली \nआ. मुंबई \nसी. चेन्नई \nडी. कोलकाता\nउत्तर : ए. दिल्ली",
+          "raw_output": "What is the capital of India?\nA. Delhi \nB. Mumbai \nC. Chennai \nD. Kolkata\nAnswer: A. Delhi"
+        }
+      ]
+    },
+    {
+      "idx": 5,
+      "prompt": "सूर्यमाला म्हणजे काय?",
+      "eval_reference": "सूर्यमाला म्हणजे सूर्य आणि त्याच्याभोवती फिरणारे ग्रह, उपग्रह, लघुग्रह आणि धूमकेतू यांचा समूह.",
+      "matches": [
+        {
+          "row_id": 12645,
+          "split_status": "IN_V0_TRAIN",
+          "token_len": 293,
+          "fuzz_ratio": 81.4814814814815,
+          "extracted_inst": "स्विस रोल म्हणजे काय?",
+          "extracted_resp": "स्विस रोल हा एक प्रकारचा स्पंज केक रोल आहे जो क्रीम किंवा जॅमने भरलेला आहे. हे सहसा साखर किंवा आयसिंग साखरेच्या हलक्या धुळीने झाकलेले असते आणि बर्याचदा हंगामी फळांनी सजवले जाते.",
+          "raw_output": "A Swiss roll is a type of sponge cake roll filled with cream or jam. It is usually covered with a light dusting of sugar or icing sugar, and is often decorated with seasonal fruits."
+        }
+      ]
+    },
+    {
+      "idx": 6,
+      "prompt": "मित्राला पत्र कसे लिहावे?",
+      "eval_reference": "प्रिय मित्र, मी तुला हे पत्र लिहित आहे कारण मला तुझ्याशी काही महत्त्वाच्या गोष्टी सांगायच्या आहेत.",
+      "matches": []
+    },
+    {
+      "idx": 7,
+      "prompt": "झाडे लावणे का महत्त्वाचे आहे?",
+      "eval_reference": "झाडे आपल्याला ऑक्सिजन देतात, पर्यावरण स्वच्छ ठेवतात आणि पाऊस आणण्यास मदत करतात.",
+      "matches": []
+    },
+    {
+      "idx": 8,
+      "prompt": "संगणक म्हणजे काय आणि त्याचा उपयोग काय?",
+      "eval_reference": "संगणक एक इलेक्ट्रॉनिक उपकरण आहे जे माहिती साठवते, प्रक्रिया करते आणि विविध कामांसाठी वापरले जाते.",
+      "matches": []
+    },
+    {
+      "idx": 9,
+      "prompt": "वेळेचे व्यवस्थापन कसे करावे?",
+      "eval_reference": "वेळेचे व्यवस्थापन करण्यासाठी दैनंदिन वेळापत्रक बनवा, प्राधान्यक्रम ठरवा आणि विलंब टाळा.",
+      "matches": [
+        {
+          "row_id": 46607,
+          "split_status": "dropped_by_length",
+          "token_len": 537,
+          "fuzz_ratio": 66.66666666666667,
+          "extracted_inst": "प्रभावी वेळेचे व्यवस्थापन कसे करावे यासाठी दोन टिपा द्या.",
+          "extracted_resp": "1. स्पष्ट उद्दिष्टे निश्चित करा आणि प्राधान्यक्रम निश्चित करा. कामे किती महत्त्वाची आहेत यावर आधारित कामांना प्राधान्य द्या आणि सर्वात महत्वाच्या गोष्टी करण्यावर प्रथम लक्ष केंद्रित करा. \n2. कार्ये लहान आणि व्यवस्थापित करण्यायोग्य चरणांमध्ये विभागून घ्या आणि प्रत्येक कार्य पूर्ण करण्यासाठी टाइमलाइन तयार करा. बर्नआउट टाळण्यास मदत करण्यासाठी डेडलाइन सेट करा आणि कार्यांदरम्यान स्वत: ला वाजवी विश्रांती द्या.",
+          "raw_output": "1. Set clear goals and establish priorities. Prioritize tasks based on how important they are and focus on doing the most important things first. \n2. Break tasks down into small and manageable steps, and create a timeline for completing each task. Set deadlines and also give yourself reasonable breaks between tasks to help avoid burnout."
+        }
+      ]
+    },
+    {
+      "idx": 10,
+      "prompt": "चांगल्या विद्यार्थ्याचे गुण कोणते असतात?",
+      "eval_reference": "चांगला विद्यार्थी नियमित अभ्यास करतो, शिक्षकांचा आदर करतो आणि जिज्ञासू वृत्ती ठेवतो.",
+      "matches": []
+    }
+  ],
+  "dedup_stats": {
+    "total_before": 52002,
+    "duplicates_removed": 43,
+    "unique_after": 51959,
+    "splits": {
+      "test": 1000,
+      "dev": 500,
+      "train": 50459
+    }
+  }
+}

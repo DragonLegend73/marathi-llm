@@ -1,0 +1,27 @@
+{
+  "gpu": "NVIDIA GeForce RTX 3050 Ti Laptop GPU",
+  "vram_total_gb": 4.0,
+  "steps_profiled": 100,
+  "effective_batch_size": 8,
+  "max_seq_len": 512,
+  "elapsed_seconds": 402.06,
+  "steps_per_second": 0.2487,
+  "samples_per_second": 1.99,
+  "peak_vram_allocated_gb": 1.379,
+  "peak_vram_reserved_gb": 1.445,
+  "initial_telemetry": {
+    "temperature_c": 51.0,
+    "power_draw_w": 15.95,
+    "gpu_utilization_pct": 0.0,
+    "memory_used_mb": 180.0,
+    "memory_total_mb": 4096.0
+  },
+  "final_telemetry": {
+    "temperature_c": 59.0,
+    "power_draw_w": 33.21,
+    "gpu_utilization_pct": 100.0,
+    "memory_used_mb": 1776.0,
+    "memory_total_mb": 4096.0
+  },
+  "estimated_minutes_for_12k_run": 100.52
+}
