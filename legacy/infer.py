@@ -1,3 +1,4 @@
+# legacy, superseded by src/marathi_llm/generate.py
 """
 infer.py — Compare base model vs fine-tuned LoRA adapter
 ---------------------------------------------------------

@@ -1,0 +1,8 @@
+{
+  "unsloth/Qwen2.5-1.5B-Instruct-bnb-4bit": {
+    "n_sentences": 1496,
+    "tokens_per_word": 3.732398635846912,
+    "tokens_per_char": 0.5728759538432905,
+    "pct_exceeding_max_len": 0.0
+  }
+}

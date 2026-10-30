@@ -1,3 +1,4 @@
+# Interactive demo tool for chatting with fine-tuned models
 """
 chat.py — Interactive terminal chat with the fine-tuned Marathi model
 ----------------------------------------------------------------------

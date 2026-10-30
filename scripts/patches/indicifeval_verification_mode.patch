@@ -1,0 +1,13 @@
+diff --git a/lm-evaluation-harness/custom_configs/indicifeval-ground/indicifeval_mr.yaml b/lm-evaluation-harness/custom_configs/indicifeval-ground/indicifeval_mr.yaml
+index 6e85373..6112a67 100644
+--- a/lm-evaluation-harness/custom_configs/indicifeval-ground/indicifeval_mr.yaml
++++ b/lm-evaluation-harness/custom_configs/indicifeval-ground/indicifeval_mr.yaml
+@@ -1,6 +1,8 @@
+ task: indicifeval_ground_mr
+ dataset_path: ai4bharat/IndicIFEval
+ dataset_name: indicifeval-ground
++dataset_kwargs:
++  verification_mode: no_checks
+ output_type: generate_until
+ test_split: mr
+ num_fewshot: 0

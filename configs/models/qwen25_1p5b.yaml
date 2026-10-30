@@ -1,0 +1,19 @@
+name: qwen25_1p5b
+hf_id: unsloth/Qwen2.5-1.5B-Instruct-bnb-4bit
+max_seq_len: 512
+prequantized: true       # true: checkpoint is already bnb-4bit; do not pass load_in_4bit to lm_eval
+load_in_4bit: true       # for full-precision repos quantized on load
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.0
+  target_modules: all-linear
+train:
+  lr: 2.0e-4
+  epochs: 1
+  per_device_batch: 2
+  grad_accum: 4          # effective batch 8
+  gradient_checkpointing: unsloth
+  response_only_loss: true
+  seed: 0
+  save_steps: 250

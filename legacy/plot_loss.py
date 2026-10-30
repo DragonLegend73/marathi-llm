@@ -1,3 +1,4 @@
+# legacy, superseded by src/marathi_llm/aggregate.py
 """
 plot_loss.py — Plot training loss from evals/loss_log.csv
 ----------------------------------------------------------

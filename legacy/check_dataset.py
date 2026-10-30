@@ -1,3 +1,4 @@
+# legacy, superseded by src/marathi_llm/data/stats.py and src/marathi_llm/eval/fertility.py
 """
 check_dataset.py — Inspect the Marathi Alpaca dataset
 ------------------------------------------------------

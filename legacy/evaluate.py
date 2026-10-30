@@ -1,3 +1,4 @@
+# legacy, superseded by src/marathi_llm/eval/
 """
 evaluate.py — Quantitative evaluation using chrF++ score
 ---------------------------------------------------------

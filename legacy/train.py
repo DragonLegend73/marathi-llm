@@ -1,3 +1,4 @@
+# legacy, superseded by src/marathi_llm/train.py
 """
 train.py — Marathi LLM Fine-Tuning with QLoRA + Unsloth
 ---------------------------------------------------------
