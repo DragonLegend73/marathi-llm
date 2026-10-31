@@ -60,6 +60,7 @@ def run_full_evaluation(
     prompt_format: str = "chat",
     prequantized: Optional[bool] = None,
     force: bool = False,
+    resume: bool = False,
     run_milu: bool = True,
     run_flores: bool = True,
     run_bpc: bool = True,
@@ -71,39 +72,46 @@ def run_full_evaluation(
 ) -> Dict[str, Any]:
     """Runs the unified evaluation suite on RTX 3050 Ti under 4 GB VRAM."""
     run_dir = Path(output_dir) / run_id
-    if run_dir.exists() and not force:
-        # Check if already completed
-        if (run_dir / "metrics.json").exists():
-            raise FileExistsError(f"Run directory '{run_dir}' already exists. Use --force to overwrite.")
-
-    run_dir.mkdir(parents=True, exist_ok=True)
     metrics_path = run_dir / "metrics.json"
 
-    metrics = {
-        "run_id": run_id,
-        "git_commit": get_git_commit(),
-        "indicifeval_commit": get_indicifeval_commit(),
-        "model": model_id,
-        "adapter": adapter_path or "none",
-        "prompt_format": prompt_format,
-        "decoding": {
-            "strategy": "greedy",
-            "temperature": None,
-            "repetition_penalty": 1.0,
-            "max_new_tokens": 256,
-        },
-        "environment": {
-            "torch": torch.__version__,
-            "transformers": transformers.__version__,
-            "peft": peft.__version__,
-            "sacrebleu": sacrebleu.__version__,
-            "device": device,
-            "batch_size": batch_size,
-        },
-    }
+    metrics = None
+    if run_dir.exists() and resume and metrics_path.exists():
+        try:
+            with open(metrics_path, "r", encoding="utf-8") as f:
+                metrics = json.load(f)
+            print(f"Resuming evaluation for run '{run_id}' from {metrics_path}...")
+        except Exception as e:
+            print(f"Warning: could not load existing metrics from {metrics_path}: {e}")
 
-    # Initialize checkpoint
-    save_metrics_checkpoint(metrics, metrics_path)
+    if metrics is None:
+        if run_dir.exists() and not force:
+            if metrics_path.exists():
+                raise FileExistsError(f"Run directory '{run_dir}' already exists. Use --force or --resume.")
+
+        run_dir.mkdir(parents=True, exist_ok=True)
+        metrics = {
+            "run_id": run_id,
+            "git_commit": get_git_commit(),
+            "indicifeval_commit": get_indicifeval_commit(),
+            "model": model_id,
+            "adapter": adapter_path or "none",
+            "prompt_format": prompt_format,
+            "decoding": {
+                "strategy": "greedy",
+                "temperature": None,
+                "repetition_penalty": 1.0,
+                "max_new_tokens": 256,
+            },
+            "environment": {
+                "torch": torch.__version__,
+                "transformers": transformers.__version__,
+                "peft": peft.__version__,
+                "sacrebleu": sacrebleu.__version__,
+                "device": device,
+                "batch_size": batch_size,
+            },
+        }
+        save_metrics_checkpoint(metrics, metrics_path)
 
     print(f"\n==========================================")
     print(f"Starting Evaluation for: {run_id}")
@@ -121,9 +129,15 @@ def run_full_evaluation(
     metrics["adapter_loaded"] = isinstance(model, peft.PeftModel) if adapter_path else False
 
     all_generations = []
+    if (run_dir / "flores_en_mr_records.json").exists():
+        try:
+            with open(run_dir / "flores_en_mr_records.json", "r", encoding="utf-8") as f:
+                all_generations.extend(json.load(f))
+        except Exception:
+            pass
 
     # 1. MILU Marathi (validation split: 810 questions)
-    if run_milu:
+    if run_milu and ("milu_mr" not in metrics or force):
         print("\n--- [1/4] Running MILU (Marathi MCQ, validation split) ---")
         milu_res = evaluate_milu(
             model=model,
@@ -148,9 +162,11 @@ def run_full_evaluation(
         with open(run_dir / "milu_validation_records.json", "w", encoding="utf-8") as f:
             json.dump(milu_res["records"], f, indent=2, ensure_ascii=False)
         save_metrics_checkpoint(metrics, metrics_path)
+    elif "milu_mr" in metrics:
+        print("\n--- [1/4] MILU already completed in checkpoint; skipping ---")
 
     # 2. Flores-IN Translation (en->mr and mr->en dev)
-    if run_flores:
+    if run_flores and ("flores" not in metrics or force):
         print("\n--- [2/4] Running Flores-IN (en->mr and mr->en) ---")
         flores_en_mr = evaluate_flores_direction(
             model=model,
@@ -195,7 +211,7 @@ def run_full_evaluation(
         save_metrics_checkpoint(metrics, metrics_path)
 
     # 3. Held-out Bits Per Character (BPC)
-    if run_bpc:
+    if run_bpc and ("heldout_bpc" not in metrics or force):
         print("\n--- [3/4] Running Held-out BPC ---")
         ref_texts = load_marathi_reference_texts(limit=bpc_limit)
         bpc_res = compute_bpc(model, tokenizer, ref_texts, device=device)
@@ -211,6 +227,8 @@ def run_full_evaluation(
         with open(run_dir / "bpc_records.json", "w", encoding="utf-8") as f:
             json.dump(bpc_res["records"], f, indent=2, ensure_ascii=False)
         save_metrics_checkpoint(metrics, metrics_path)
+    elif "heldout_bpc" in metrics:
+        print("\n--- [3/4] BPC already completed in checkpoint; skipping ---")
 
     # 4. Automatic Generation Metrics
     if all_generations:
@@ -239,7 +257,7 @@ def run_full_evaluation(
     torch.cuda.empty_cache()
 
     # 5. IndicIFEval (Harness subprocess)
-    if run_ifeval:
+    if run_ifeval and ("instruction_following" not in metrics or force):
         print("\n--- [4/4] Running IndicIFEval ---")
         try:
             ifeval_out = run_dir / "ifeval"
@@ -257,6 +275,8 @@ def run_full_evaluation(
             print(f"Warning: IndicIFEval execution failed: {e}")
             metrics["instruction_following"] = {"error": str(e)}
         save_metrics_checkpoint(metrics, metrics_path)
+    elif "instruction_following" in metrics:
+        print("\n--- [4/4] IndicIFEval already completed in checkpoint; skipping ---")
 
     print(f"\n==========================================")
     print(f"Finished evaluation! Saved to: {metrics_path}")
@@ -275,6 +295,7 @@ def main():
     parser.add_argument("--prequantized", action="store_true", default=None)
     parser.add_argument("--no-prequantized", action="store_false", dest="prequantized")
     parser.add_argument("--force", action="store_true", help="Overwrite existing run_id directory")
+    parser.add_argument("--resume", action="store_true", help="Resume run using existing checkpoint without repeating completed benchmarks")
     parser.add_argument("--skip-milu", action="store_true")
     parser.add_argument("--skip-flores", action="store_true")
     parser.add_argument("--skip-bpc", action="store_true")
@@ -293,6 +314,7 @@ def main():
         prompt_format=args.prompt_format,
         prequantized=args.prequantized,
         force=args.force,
+        resume=args.resume,
         run_milu=not args.skip_milu,
         run_flores=not args.skip_flores,
         run_bpc=not args.skip_bpc,
