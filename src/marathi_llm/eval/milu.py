@@ -10,11 +10,9 @@ from collections import Counter
 import torch
 import numpy as np
 from datasets import load_dataset
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from peft import PeftModel
 
 from marathi_llm.eval.stats import bootstrap_ci
-from marathi_llm.generate import prepare_prompt
+from marathi_llm.generate import prepare_prompt, load_model_and_tokenizer
 
 
 OPTION_MAP = {
@@ -101,8 +99,9 @@ def evaluate_milu(
             prompt_text = prepare_prompt(raw_prompt, tokenizer, prompt_format=prompt_format)
             prompts.append(prompt_text)
 
+        add_special = (prompt_format != "chat")
         for p in prompts:
-            if len(tokenizer.encode(p, add_special_tokens=False)) > 1024:
+            if len(tokenizer.encode(p, add_special_tokens=add_special)) > 1024:
                 truncated_count += 1
 
         inputs = tokenizer(
@@ -111,6 +110,7 @@ def evaluate_milu(
             padding=True,
             truncation=True,
             max_length=1024,
+            add_special_tokens=add_special,
         ).to(device)
 
         with torch.no_grad():
@@ -137,8 +137,8 @@ def evaluate_milu(
             target = OPTION_MAP.get(target_raw, target_raw.upper())
             is_correct = bool(predicted == target)
 
-            # Sum of probabilities across option letters
-            option_mass = float(sum(sample_probs[choice_token_ids[l][0]].item() for l in CHOICE_LETTERS))
+            # Sum of probabilities across option letters (summing all token IDs per letter)
+            option_mass = float(sum(sum(sample_probs[tid].item() for tid in choice_token_ids[l]) for l in CHOICE_LETTERS))
             letter_masses.append(option_mass)
 
             correct_list.append(1.0 if is_correct else 0.0)
@@ -207,30 +207,18 @@ def main():
     parser.add_argument("--adapter", default=None, help="Optional LoRA adapter path")
     parser.add_argument("--split", default="validation", choices=["validation", "test"], help="MILU split")
     parser.add_argument("--batch-size", type=int, default=4, help="Inference batch size")
-    parser.add_argument("--no-chat-template", action="store_true", help="Disable chat template wrapper")
+    parser.add_argument("--prompt-format", default="chat", choices=["chat", "alpaca_v0", "raw"])
     parser.add_argument("--output-dir", default="results/milu", help="Directory to save results")
     args = parser.parse_args()
 
-    print(f"Loading tokenizer: {args.model}...")
-    tokenizer = AutoTokenizer.from_pretrained(args.model, trust_remote_code=True)
-
-    print(f"Loading model: {args.model}...")
-    model = AutoModelForCausalLM.from_pretrained(
-        args.model,
-        device_map="cuda:0",
-        trust_remote_code=True,
-    )
-
-    if args.adapter:
-        print(f"Attaching LoRA adapter from: {args.adapter}...")
-        model = PeftModel.from_pretrained(model, args.adapter)
+    model, tokenizer, prequantized = load_model_and_tokenizer(args.model, args.adapter)
 
     results = evaluate_milu(
         model=model,
         tokenizer=tokenizer,
         split=args.split,
         batch_size=args.batch_size,
-        use_chat_template=not args.no_chat_template,
+        prompt_format=args.prompt_format,
     )
 
     summary = results["summary"]

@@ -35,7 +35,7 @@ def is_devanagari_char(c):
 def compute_script_purity(text):
     if not text:
         return 0.0
-    chars = [c for c in text if not c.isspace() and not unicodedata.category(c).startswith("P")]
+    chars = [c for c in text if unicodedata.category(c).startswith(("L", "M"))]
     if not chars:
         return 0.0
     deva_count = sum(1 for c in chars if is_devanagari_char(c))

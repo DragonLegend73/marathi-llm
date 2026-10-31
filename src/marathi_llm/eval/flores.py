@@ -63,10 +63,13 @@ def evaluate_flores_direction(
     batch_size: int = 4,
     max_new_tokens: int = 256,
     prompt_format: str = "chat",
+    limit: Optional[int] = None,
     device: str = "cuda:0",
 ) -> Dict[str, Any]:
     """Evaluates a single Flores-IN direction."""
     items = load_flores_data(direction=direction, split=split)
+    if limit is not None:
+        items = items[:limit]
     print(f"Evaluating Flores-IN ({direction}, {split}, n={len(items)})...")
 
     generations = generate_batch(
@@ -132,11 +135,12 @@ def main():
     parser.add_argument("--direction", default="both", choices=["en_mr", "mr_en", "both"])
     parser.add_argument("--split", default="dev", choices=["dev", "test"])
     parser.add_argument("--batch-size", type=int, default=4)
+    parser.add_argument("--prompt-format", default="chat", choices=["chat", "alpaca_v0", "raw"])
     parser.add_argument("--limit", type=int, default=None, help="Optional sample limit for testing")
     parser.add_argument("--output-dir", default="results/flores")
     args = parser.parse_args()
 
-    model, tokenizer = load_model_and_tokenizer(args.model, args.adapter)
+    model, tokenizer, prequantized = load_model_and_tokenizer(args.model, args.adapter)
     directions = ["en_mr", "mr_en"] if args.direction == "both" else [args.direction]
 
     out_dir = Path(args.output_dir)
@@ -149,6 +153,8 @@ def main():
             direction=d,
             split=args.split,
             batch_size=args.batch_size,
+            prompt_format=args.prompt_format,
+            limit=args.limit,
         )
         s = res["summary"]
         print(f"\n[{d.upper()}] Corpus chrF++: {s['corpus_chrf_pp']:.2f} | Mean: {s['mean_sentence_chrf_pp']:.2f} (95% CI: [{s['ci_95'][0]:.2f}, {s['ci_95'][1]:.2f}])")

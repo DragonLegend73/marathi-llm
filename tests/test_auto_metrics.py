@@ -2,10 +2,31 @@ import pytest
 from marathi_llm.eval.auto_metrics import compute_script_purity, compute_repetition_metrics
 
 
-def test_script_purity_pure_marathi():
-    marathi_text = "महाराष्ट्र हे भारतातील एक राज्य आहे."
-    purity = compute_script_purity(marathi_text)
-    assert purity > 98.0
+def test_script_purity_with_numbers_and_punctuation():
+    # Marathi with numbers and punctuation should have 100% letter/mark purity
+    text = "भारताची राजधानी १००० रुपये (२०२६ रोजी)."
+    purity = compute_script_purity(text)
+    assert purity == 100.0
+
+
+def test_evaluate_generations_schema():
+    from marathi_llm.eval.auto_metrics import evaluate_generations
+    items = [
+        {"output": "महाराष्ट्राची राजधानी मुंबई आहे.", "finish_reason": "eos", "n_new_tokens": 12},
+        {"output": "This is leaked english response.", "finish_reason": "eos", "n_new_tokens": 8},
+        {"output": "", "finish_reason": "length", "n_new_tokens": 0},
+    ]
+    res = evaluate_generations(items)
+    assert res["n_samples"] == 3
+    assert 0.0 < res["script_purity"] < 100.0
+    assert "lang_id_mr" in res
+    assert "repeat_4gram" in res
+    assert "distinct_4grams_ratio" in res
+    assert "eos_rate" in res
+    assert "english_leak_ratio" in res
+    assert "empty_output_rate" in res
+    assert res["empty_output_rate"] == pytest.approx(33.33, abs=0.1)
+
 
 
 def test_script_purity_pure_english():

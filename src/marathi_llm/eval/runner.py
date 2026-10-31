@@ -9,6 +9,11 @@ import argparse
 from pathlib import Path
 from typing import Dict, Any, Optional
 
+if "TRITON_CACHE_DIR" not in os.environ:
+    os.environ["TRITON_CACHE_DIR"] = "/tmp/triton"
+if "HF_HUB_OFFLINE" not in os.environ:
+    os.environ["HF_HUB_OFFLINE"] = "1"
+
 import torch
 import transformers
 import peft
@@ -61,6 +66,7 @@ def run_full_evaluation(
     run_ifeval: bool = True,
     ifeval_limit: Optional[int] = None,
     bpc_limit: Optional[int] = None,
+    flores_limit: Optional[int] = None,
     device: str = "cuda:0",
 ) -> Dict[str, Any]:
     """Runs the unified evaluation suite on RTX 3050 Ti under 4 GB VRAM."""
@@ -104,14 +110,14 @@ def run_full_evaluation(
     print(f"Model: {model_id} | Adapter: {adapter_path} | Format: {prompt_format}")
     print(f"==========================================\n")
 
-    model, tokenizer = load_model_and_tokenizer(
+    model, tokenizer, is_preq = load_model_and_tokenizer(
         model_id=model_id,
         adapter_path=adapter_path,
         device=device,
         prequantized=prequantized,
     )
 
-    metrics["quant"] = "prequantized-bnb-4bit" if getattr(model, "is_loaded_in_4bit", False) else "4bit"
+    metrics["quant"] = "prequantized-bnb-4bit" if is_preq else ("4bit" if getattr(model, "is_loaded_in_4bit", False) else "fp16")
     metrics["adapter_loaded"] = isinstance(model, peft.PeftModel) if adapter_path else False
 
     all_generations = []
@@ -153,6 +159,7 @@ def run_full_evaluation(
             split="dev",
             batch_size=batch_size,
             prompt_format=prompt_format,
+            limit=flores_limit,
             device=device,
         )
         flores_mr_en = evaluate_flores_direction(
@@ -162,6 +169,7 @@ def run_full_evaluation(
             split="dev",
             batch_size=batch_size,
             prompt_format=prompt_format,
+            limit=flores_limit,
             device=device,
         )
 
@@ -191,23 +199,31 @@ def run_full_evaluation(
         print("\n--- [3/4] Running Held-out BPC ---")
         ref_texts = load_marathi_reference_texts(limit=bpc_limit)
         bpc_res = compute_bpc(model, tokenizer, ref_texts, device=device)
+        bpc_s = bpc_res["summary"]
         metrics["heldout_bpc"] = {
-            "flores_mr_dev": bpc_res["bits_per_character"],
-            "flores_mr_dev_bpb": bpc_res["bits_per_byte"],
-            "perplexity": bpc_res["token_perplexity"],
-            "n_sentences": bpc_res["n_sentences"],
+            "flores_mr_dev": bpc_s["bits_per_character"],
+            "flores_mr_dev_bpb": bpc_s["bits_per_byte"],
+            "perplexity": bpc_s["token_perplexity"],
+            "n_sentences": bpc_s["n_sentences"],
+            "ci95": bpc_s.get("bpc_sentence_ci95"),
+            "bos_token_id_used": bpc_s.get("bos_token_id_used"),
         }
+        with open(run_dir / "bpc_records.json", "w", encoding="utf-8") as f:
+            json.dump(bpc_res["records"], f, indent=2, ensure_ascii=False)
         save_metrics_checkpoint(metrics, metrics_path)
 
     # 4. Automatic Generation Metrics
     if all_generations:
         auto_stats = evaluate_generations(all_generations)
         metrics["auto"] = {
-            "script_purity": auto_stats.get("mean_script_purity", 0.0),
-            "repeat_4gram": auto_stats.get("repetition_rate", 0.0),
-            "distinct_4grams_ratio": auto_stats.get("mean_distinct_4grams_ratio", 0.0),
+            "script_purity": auto_stats.get("script_purity", 0.0),
+            "lang_id_mr": auto_stats.get("lang_id_mr", 0.0),
+            "repeat_4gram": auto_stats.get("repeat_4gram", 0.0),
+            "distinct_4grams_ratio": auto_stats.get("distinct_4grams_ratio", 0.0),
             "eos_rate": auto_stats.get("eos_rate", 0.0),
-            "mean_len_tokens": auto_stats.get("mean_new_tokens", 0.0),
+            "mean_len_tokens": auto_stats.get("mean_len_tokens", 0.0),
+            "english_leak_ratio": auto_stats.get("english_leak_ratio", 0.0),
+            "empty_output_rate": auto_stats.get("empty_output_rate", 0.0),
         }
         save_metrics_checkpoint(metrics, metrics_path)
 
@@ -265,6 +281,7 @@ def main():
     parser.add_argument("--skip-ifeval", action="store_true")
     parser.add_argument("--ifeval-limit", type=int, default=None)
     parser.add_argument("--bpc-limit", type=int, default=None)
+    parser.add_argument("--flores-limit", type=int, default=None)
     args = parser.parse_args()
 
     run_full_evaluation(
@@ -282,6 +299,7 @@ def main():
         run_ifeval=not args.skip_ifeval,
         ifeval_limit=args.ifeval_limit,
         bpc_limit=args.bpc_limit,
+        flores_limit=args.flores_limit,
     )
 
 

@@ -79,9 +79,8 @@ def load_marathi_eval_data(
                     inst, resp = extract_instruction_and_response(trans_text)
                     if resp:
                         s0_responses.append(resp)
-                    if inst and resp:
-                        full_text = f"### सूचना:\n{inst}\n\n### उत्तर:\n{resp}"
-                        s0_full_examples.append(full_text)
+                    if trans_text:
+                        s0_full_examples.append(trans_text)
         except Exception as e:
             print(f"Warning: could not load S0 dev responses: {e}")
 
@@ -115,13 +114,15 @@ def compute_text_fertility(tokenizer, texts: List[str]) -> Dict[str, float]:
 
 
 def compute_truncation_rate(tokenizer, full_examples: List[str], max_len: int = 512) -> float:
-    """Computes % of full training examples that exceed max_len tokens."""
+    """Computes % of full training examples that exceed max_len tokens (including EOS)."""
     if not full_examples:
         return 0.0
 
+    eos_token = tokenizer.eos_token or ""
     exceeds = 0
     for ex in full_examples:
-        tok_len = len(tokenizer.encode(ex, add_special_tokens=False))
+        tok_text = ex + eos_token
+        tok_len = len(tokenizer.encode(tok_text, add_special_tokens=False))
         if tok_len > max_len:
             exceeds += 1
 

@@ -69,6 +69,62 @@ def bootstrap_corpus_chrf(
     }
 
 
+def paired_bootstrap_corpus_chrf(
+    hypotheses_a: List[str],
+    hypotheses_b: List[str],
+    references: List[str],
+    n_bootstraps: int = 1000,
+    ci: float = 0.95,
+    seed: int = 42,
+) -> Dict[str, Any]:
+    """
+    Computes paired difference in corpus-level chrF++ (B - A) using shared resample indices.
+    """
+    import sacrebleu
+
+    if len(hypotheses_a) != len(hypotheses_b) or len(hypotheses_a) != len(references):
+        raise ValueError("Lengths of hypotheses_a, hypotheses_b, and references must match.")
+
+    n = len(references)
+    if n == 0:
+        return {"diff_corpus_chrf": 0.0, "ci_low": 0.0, "ci_high": 0.0, "p_value": 1.0, "is_significant": False}
+
+    score_a = float(sacrebleu.corpus_chrf(hypotheses_a, [references], word_order=2).score)
+    score_b = float(sacrebleu.corpus_chrf(hypotheses_b, [references], word_order=2).score)
+    diff = score_b - score_a
+
+    rng = np.random.default_rng(seed)
+    hyps_a_arr = np.array(hypotheses_a, dtype=object)
+    hyps_b_arr = np.array(hypotheses_b, dtype=object)
+    refs_arr = np.array(references, dtype=object)
+
+    boot_diffs = []
+    for _ in range(n_bootstraps):
+        idxs = rng.integers(0, n, size=n)
+        s_a = sacrebleu.corpus_chrf(hyps_a_arr[idxs].tolist(), [refs_arr[idxs].tolist()], word_order=2).score
+        s_b = sacrebleu.corpus_chrf(hyps_b_arr[idxs].tolist(), [refs_arr[idxs].tolist()], word_order=2).score
+        boot_diffs.append(s_b - s_a)
+
+    boot_diffs = np.array(boot_diffs)
+    alpha = (1.0 - ci) / 2.0
+    low = float(np.percentile(boot_diffs, 100 * alpha))
+    high = float(np.percentile(boot_diffs, 100 * (1.0 - alpha)))
+
+    centered = boot_diffs - diff
+    p_value = float(np.mean(np.abs(centered) >= np.abs(diff)))
+    is_significant = (low > 0.0 and high > 0.0) or (low < 0.0 and high < 0.0)
+
+    return {
+        "diff_corpus_chrf": diff,
+        "score_a": score_a,
+        "score_b": score_b,
+        "ci_low": low,
+        "ci_high": high,
+        "p_value": p_value,
+        "is_significant": is_significant,
+    }
+
+
 def paired_bootstrap_ci(
     scores_a: List[float] | np.ndarray,
     scores_b: List[float] | np.ndarray,

@@ -45,7 +45,8 @@ def test_prepare_prompt_formats():
     # alpaca_v0 format
     alpaca = prepare_prompt(raw, tokenizer=None, prompt_format="alpaca_v0")
     assert "### सूचना:" in alpaca
-    assert "### उत्तर:" in alpaca
+    assert "### प्रतिसाद:" in alpaca
+    assert "खाली एक सूचना आहे" in alpaca
     assert raw in alpaca
 
     # raw format

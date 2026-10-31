@@ -5,7 +5,7 @@ import json
 import logging
 import argparse
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Set
+from typing import List, Dict, Any, Optional, Set, Tuple
 
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig, BitsAndBytesConfig
@@ -13,17 +13,30 @@ from peft import PeftModel
 
 logger = logging.getLogger(__name__)
 
+ALPACAV0_PROMPT_NO_INPUT = (
+    "खाली एक सूचना आहे जी एखाद्या कार्याचे वर्णन करते. "
+    "विनंती योग्य रितीने पूर्ण करणारा प्रतिसाद लिहा.\n\n"
+    "### सूचना:\n{instruction}\n\n### प्रतिसाद:\n"
+)
+
+ALPACAV0_PROMPT_WITH_INPUT = (
+    "खाली एक सूचना आहे जी एखाद्या कार्याचे वर्णन करते, आणि त्यासोबत जोडलेले इनपुट अतिरिक्त संदर्भ पुरवते. "
+    "विनंती योग्य रितीने पूर्ण करणारा प्रतिसाद लिहा.\n\n"
+    "### सूचना:\n{instruction}\n\n### इनपुट:\n{input_text}\n\n### प्रतिसाद:\n"
+)
+
 
 def load_model_and_tokenizer(
     model_id: str,
     adapter_path: Optional[str] = None,
     device: str = "cuda:0",
     prequantized: Optional[bool] = None,
+    compute_dtype: Optional[torch.dtype] = None,
     trust_remote_code: bool = False,
-):
+) -> Tuple[Any, Any, bool]:
     """
     Loads base model and optional LoRA adapter with left-padding tokenizer.
-    If adapter_path is provided, loads from local disk or Hugging Face Hub and verifies attachment.
+    Returns (model, tokenizer, prequantized).
     """
     print(f"Loading tokenizer: {model_id}...")
     tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=trust_remote_code)
@@ -40,7 +53,10 @@ def load_model_and_tokenizer(
         except Exception:
             prequantized = "bnb-4bit" in model_id.lower() or "4bit" in model_id.lower()
 
-    print(f"Loading model: {model_id} (prequantized={prequantized})...")
+    if compute_dtype is None:
+        compute_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+
+    print(f"Loading model: {model_id} (prequantized={prequantized}, compute_dtype={compute_dtype})...")
     kwargs = {"device_map": device, "trust_remote_code": trust_remote_code}
 
     if not prequantized:
@@ -48,26 +64,24 @@ def load_model_and_tokenizer(
         kwargs["quantization_config"] = BitsAndBytesConfig(
             load_in_4bit=True,
             bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_compute_dtype=compute_dtype,
             bnb_4bit_use_double_quant=True,
         )
 
     model = AutoModelForCausalLM.from_pretrained(model_id, **kwargs)
 
-    adapter_loaded = False
     if adapter_path:
         print(f"Attaching LoRA adapter: {adapter_path}...")
         try:
             model = PeftModel.from_pretrained(model, adapter_path)
             if not isinstance(model, PeftModel):
                 raise RuntimeError(f"Model was not wrapped as PeftModel after loading from {adapter_path}")
-            adapter_loaded = True
             print(f"Successfully attached LoRA adapter from {adapter_path}")
         except Exception as e:
             raise RuntimeError(f"Failed to load LoRA adapter from '{adapter_path}': {e}") from e
 
     model.eval()
-    return model, tokenizer
+    return model, tokenizer, prequantized
 
 
 def prepare_prompt(
@@ -75,15 +89,21 @@ def prepare_prompt(
     tokenizer,
     prompt_format: str = "chat",
     system_prompt: Optional[str] = None,
+    input_text: Optional[str] = None,
 ) -> str:
     """
     Formats prompt according to prompt_format:
     - 'chat': native chat template (with enable_thinking=False for Qwen3)
-    - 'alpaca_v0': legacy Alpaca training template
+    - 'alpaca_v0': legacy Alpaca training template (with full Marathi preamble)
     - 'raw': unchanged string
     """
     if prompt_format == "alpaca_v0":
-        return f"### सूचना:\n{raw_prompt}\n\n### उत्तर:\n"
+        if input_text and input_text.strip():
+            return ALPACAV0_PROMPT_WITH_INPUT.format(
+                instruction=raw_prompt.strip(),
+                input_text=input_text.strip(),
+            )
+        return ALPACAV0_PROMPT_NO_INPUT.format(instruction=raw_prompt.strip())
 
     if prompt_format == "raw" or not hasattr(tokenizer, "apply_chat_template") or not tokenizer.chat_template:
         return raw_prompt
@@ -92,7 +112,10 @@ def prepare_prompt(
     messages = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
-    messages.append({"role": "user", "content": raw_prompt})
+    content = raw_prompt
+    if input_text and input_text.strip():
+        content = f"{raw_prompt}\n\n{input_text.strip()}"
+    messages.append({"role": "user", "content": content})
 
     template_kwargs = {"tokenize": False, "add_generation_prompt": True}
     try:
@@ -128,7 +151,7 @@ def generate_batch(
 ) -> List[Dict[str, Any]]:
     """
     Executes greedy batched generation with deterministic length-based sorting.
-    Each item must be a dict with 'id' and 'prompt' keys.
+    Each item must be a dict with 'id' and 'prompt' keys (and optional 'input' key).
     Returns items with 'output', 'finish_reason', and 'n_new_tokens'.
     """
     if not items:
@@ -144,7 +167,14 @@ def generate_batch(
     formatted = []
     for idx, it in enumerate(items):
         raw_p = it.get("prompt", "")
-        p_text = prepare_prompt(raw_p, tokenizer, prompt_format=prompt_format, system_prompt=system_prompt)
+        inp_text = it.get("input") or it.get("input_text") or None
+        p_text = prepare_prompt(
+            raw_p,
+            tokenizer,
+            prompt_format=prompt_format,
+            system_prompt=system_prompt,
+            input_text=inp_text,
+        )
         formatted.append({
             "orig_idx": idx,
             "id": it.get("id", str(idx)),
@@ -160,6 +190,9 @@ def generate_batch(
     n_total = len(sorted_items)
     truncated_count = 0
 
+    # Avoid double BOS: when prompt_format == "chat", chat template already rendered BOS
+    add_special = (prompt_format != "chat")
+
     for start in range(0, n_total, batch_size):
         chunk = sorted_items[start : min(start + batch_size, n_total)]
         batch_texts = [c["input_text"] for c in chunk]
@@ -170,11 +203,12 @@ def generate_batch(
             padding=True,
             truncation=True,
             max_length=2048,
+            add_special_tokens=add_special,
         ).to(device)
 
         # Check if left-truncation occurred
         for t_idx, txt in enumerate(batch_texts):
-            raw_len = len(tokenizer.encode(txt, add_special_tokens=False))
+            raw_len = len(tokenizer.encode(txt, add_special_tokens=add_special))
             if raw_len > 2048:
                 truncated_count += 1
 
@@ -258,7 +292,7 @@ def main():
 
     print(f"Loaded {len(items)} items from {args.input}")
 
-    model, tokenizer = load_model_and_tokenizer(args.model, args.adapter)
+    model, tokenizer, prequantized = load_model_and_tokenizer(args.model, args.adapter)
     results = generate_batch(
         model=model,
         tokenizer=tokenizer,

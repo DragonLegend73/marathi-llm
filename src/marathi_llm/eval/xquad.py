@@ -104,7 +104,7 @@ def evaluate_xquad(
     tokenizer,
     split: str = "dev",
     batch_size: int = 4,
-    use_chat_template: bool = True,
+    prompt_format: str = "chat",
     device: str = "cuda:0",
 ) -> Dict[str, Any]:
     """Runs XQuAD evaluation on Marathi."""
@@ -117,7 +117,7 @@ def evaluate_xquad(
         items=items,
         batch_size=batch_size,
         max_new_tokens=32,
-        use_chat_template=use_chat_template,
+        prompt_format=prompt_format,
         device=device,
     )
 
@@ -164,11 +164,18 @@ def main():
     parser.add_argument("--adapter", default=None)
     parser.add_argument("--split", default="dev", choices=["dev", "test"])
     parser.add_argument("--batch-size", type=int, default=4)
+    parser.add_argument("--prompt-format", default="chat", choices=["chat", "alpaca_v0", "raw"])
     parser.add_argument("--output-dir", default="results/xquad")
     args = parser.parse_args()
 
-    model, tokenizer = load_model_and_tokenizer(args.model, args.adapter)
-    results = evaluate_xquad(model, tokenizer, split=args.split, batch_size=args.batch_size)
+    model, tokenizer, prequantized = load_model_and_tokenizer(args.model, args.adapter)
+    results = evaluate_xquad(
+        model,
+        tokenizer,
+        split=args.split,
+        batch_size=args.batch_size,
+        prompt_format=args.prompt_format,
+    )
 
     s = results["summary"]
     print("\n--- XQuAD Evaluation Summary ---")

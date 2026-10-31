@@ -8,6 +8,17 @@ import argparse
 from pathlib import Path
 from typing import Dict, Any, Optional
 
+if "TRITON_CACHE_DIR" not in os.environ:
+    os.environ["TRITON_CACHE_DIR"] = "/tmp/triton"
+if "HF_HUB_OFFLINE" not in os.environ:
+    os.environ["HF_HUB_OFFLINE"] = "1"
+
+try:
+    from langdetect import DetectorFactory
+    DetectorFactory.seed = 42
+except ImportError:
+    pass
+
 
 def run_indicifeval(
     model_id: str,
@@ -45,6 +56,8 @@ def run_indicifeval(
         "--device", device,
         "--apply_chat_template",
         "--log_samples",
+        "--seed", "42",
+        "--gen_kwargs", "max_gen_toks=1280",
         "--output_path", str(out_path),
     ]
 
@@ -72,8 +85,17 @@ def run_indicifeval(
         raw_res = json.load(f)
 
     results_by_task = raw_res.get("results", {})
+    actual_max_gen = None
+    if "configs" in raw_res:
+        for t_cfg in raw_res["configs"].values():
+            if "generation_kwargs" in t_cfg and "max_gen_toks" in t_cfg["generation_kwargs"]:
+                actual_max_gen = t_cfg["generation_kwargs"]["max_gen_toks"]
+                break
+    if actual_max_gen is None:
+        actual_max_gen = raw_res.get("config", {}).get("gen_kwargs", {}).get("max_gen_toks", 1280)
+
     parsed_metrics = {
-        "max_gen_toks": 1280,
+        "max_gen_toks": actual_max_gen,
     }
 
     for task_name, task_metrics in results_by_task.items():
@@ -86,14 +108,29 @@ def run_indicifeval(
                 val = task_metrics.get(metric_name)
             if val is None:
                 raise KeyError(f"Metric '{metric_name}' not found in task '{task_name}' results: {list(task_metrics.keys())}")
-            return float(val * 100.0)
+            stderr = task_metrics.get(f"{metric_name}_stderr,none")
+            if stderr is None:
+                stderr = task_metrics.get(f"{metric_name}_stderr")
+            stderr_val = None
+            if stderr is not None and stderr != "N/A":
+                try:
+                    stderr_val = float(stderr) * 100.0
+                except (ValueError, TypeError):
+                    stderr_val = None
+            return float(val * 100.0), stderr_val
 
-        task_data = {
-            "prompt_level_strict_acc": get_metric("prompt_level_strict_acc"),
-            "prompt_level_loose_acc": get_metric("prompt_level_loose_acc"),
-            "inst_level_strict_acc": get_metric("inst_level_strict_acc"),
-            "inst_level_loose_acc": get_metric("inst_level_loose_acc"),
-        }
+        task_data = {}
+        for m_name in [
+            "prompt_level_strict_acc",
+            "prompt_level_loose_acc",
+            "inst_level_strict_acc",
+            "inst_level_loose_acc",
+        ]:
+            val, err = get_metric(m_name)
+            task_data[m_name] = val
+            if err is not None:
+                task_data[f"{m_name}_stderr"] = err
+
         parsed_metrics[short_key] = task_data
         parsed_metrics[task_name] = task_data
 
