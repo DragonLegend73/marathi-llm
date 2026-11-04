@@ -80,6 +80,9 @@ def load_model_and_tokenizer(
         except Exception as e:
             raise RuntimeError(f"Failed to load LoRA adapter from '{adapter_path}': {e}") from e
 
+    if hasattr(model, "generation_config") and model.generation_config is not None:
+        model.generation_config.max_length = None
+
     model.eval()
     return model, tokenizer, prequantized
 
@@ -162,6 +165,10 @@ def generate_batch(
 
     eos_token_ids = get_all_eos_token_ids(model, tokenizer)
     primary_eos_id = tokenizer.eos_token_id
+
+    # Resolve max_length vs max_new_tokens ambiguity to eliminate noisy warnings
+    if hasattr(model, "generation_config") and model.generation_config is not None:
+        model.generation_config.max_length = None
 
     # Format prompts
     formatted = []
