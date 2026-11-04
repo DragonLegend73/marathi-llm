@@ -64,6 +64,7 @@ def evaluate_flores_direction(
     max_new_tokens: int = 256,
     prompt_format: str = "chat",
     limit: Optional[int] = None,
+    checkpoint_path: Optional[str] = None,
     device: str = "cuda:0",
 ) -> Dict[str, Any]:
     """Evaluates a single Flores-IN direction."""
@@ -79,6 +80,7 @@ def evaluate_flores_direction(
         batch_size=batch_size,
         max_new_tokens=max_new_tokens,
         prompt_format=prompt_format,
+        checkpoint_path=checkpoint_path,
         device=device,
     )
 

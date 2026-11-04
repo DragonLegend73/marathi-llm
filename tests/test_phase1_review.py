@@ -72,3 +72,50 @@ def test_bootstrap_corpus_chrf_basic():
     assert pytest.approx(res["corpus_chrf"], 0.1) == 100.0
     assert pytest.approx(res["ci_low"], 0.1) == 100.0
     assert pytest.approx(res["ci_high"], 0.1) == 100.0
+
+
+def test_generate_batch_checkpoint_resume(tmp_path):
+    """Verifies that generate_batch resumes seamlessly from existing checkpoint file."""
+    import json
+    from unittest.mock import MagicMock
+    import torch
+    from marathi_llm.generate import generate_batch
+
+    mock_model = MagicMock()
+    mock_tokenizer = MagicMock()
+    mock_tokenizer.pad_token_id = 0
+    mock_tokenizer.eos_token_id = 1
+    mock_tokenizer.chat_template = None
+    mock_tokenizer.encode.return_value = [10, 20]
+    mock_tokenizer.decode.return_value = "नमुना उत्तर"
+
+    # Pre-populate a checkpoint file with 1 of 2 items
+    ckpt_file = tmp_path / "checkpoint.jsonl"
+    with open(ckpt_file, "w", encoding="utf-8") as f:
+        f.write(json.dumps({"id": "item_1", "output": "पहिला उत्तर", "finish_reason": "eos", "n_new_tokens": 5}) + "\n")
+
+    items = [
+        {"id": "item_1", "prompt": "प्रश्‍न १"},
+        {"id": "item_2", "prompt": "प्रश्‍न २"},
+    ]
+
+    mock_model.generate.return_value = torch.tensor([[10, 20, 30]])
+    mock_tokenizer.return_value = MagicMock(
+        to=MagicMock(return_value={"input_ids": torch.tensor([[10, 20]])}),
+        __getitem__=lambda self, key: torch.tensor([[10, 20]]),
+    )
+
+    results = generate_batch(
+        mock_model,
+        mock_tokenizer,
+        items,
+        batch_size=1,
+        checkpoint_path=str(ckpt_file),
+    )
+
+    assert len(results) == 2
+    assert results[0]["id"] == "item_1"
+    assert results[0]["output"] == "पहिला उत्तर"  # restored from checkpoint
+    assert results[1]["id"] == "item_2"
+    # Checkpoint should be unlinked upon successful completion of all items
+    assert not ckpt_file.exists()

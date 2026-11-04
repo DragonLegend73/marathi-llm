@@ -3,6 +3,7 @@
 import os
 import gc
 import sys
+import time
 import json
 import subprocess
 import argparse
@@ -138,13 +139,19 @@ def run_full_evaluation(
 
     # 1. MILU Marathi (validation split: 810 questions)
     if run_milu and ("milu_mr" not in metrics or force):
-        print("\n--- [1/4] Running MILU (Marathi MCQ, validation split) ---")
+        print("\n--- [1/4] Running MILU (Marathi MCQ, validation split) ---", flush=True)
+        t0 = time.time()
+        milu_partial = str(run_dir / "milu_partial.jsonl")
+        if force and Path(milu_partial).exists():
+            Path(milu_partial).unlink()
+
         milu_res = evaluate_milu(
             model=model,
             tokenizer=tokenizer,
             split="validation",
             batch_size=batch_size,
             prompt_format=prompt_format,
+            checkpoint_path=milu_partial,
             device=device,
         )
         s = milu_res["summary"]
@@ -162,12 +169,21 @@ def run_full_evaluation(
         with open(run_dir / "milu_validation_records.json", "w", encoding="utf-8") as f:
             json.dump(milu_res["records"], f, indent=2, ensure_ascii=False)
         save_metrics_checkpoint(metrics, metrics_path)
+        print(f"[MILU Completed in {time.time() - t0:.1f}s] Accuracy: {s['accuracy']:.2%} (95% CI: [{s['ci_95'][0]:.2%}, {s['ci_95'][1]:.2%}])", flush=True)
     elif "milu_mr" in metrics:
-        print("\n--- [1/4] MILU already completed in checkpoint; skipping ---")
+        print("\n--- [1/4] MILU already completed in checkpoint; skipping ---", flush=True)
 
     # 2. Flores-IN Translation (en->mr and mr->en dev)
     if run_flores and ("flores" not in metrics or force):
-        print("\n--- [2/4] Running Flores-IN (en->mr and mr->en) ---")
+        print("\n--- [2/4] Running Flores-IN (en->mr and mr->en) ---", flush=True)
+        t0 = time.time()
+        en_mr_partial = str(run_dir / "flores_en_mr_partial.jsonl")
+        mr_en_partial = str(run_dir / "flores_mr_en_partial.jsonl")
+        if force:
+            for p in [en_mr_partial, mr_en_partial]:
+                if Path(p).exists():
+                    Path(p).unlink()
+
         flores_en_mr = evaluate_flores_direction(
             model=model,
             tokenizer=tokenizer,
@@ -176,6 +192,7 @@ def run_full_evaluation(
             batch_size=batch_size,
             prompt_format=prompt_format,
             limit=flores_limit,
+            checkpoint_path=en_mr_partial,
             device=device,
         )
         flores_mr_en = evaluate_flores_direction(
@@ -186,6 +203,7 @@ def run_full_evaluation(
             batch_size=batch_size,
             prompt_format=prompt_format,
             limit=flores_limit,
+            checkpoint_path=mr_en_partial,
             device=device,
         )
 
@@ -209,12 +227,18 @@ def run_full_evaluation(
         with open(run_dir / "flores_mr_en_records.json", "w", encoding="utf-8") as f:
             json.dump(flores_mr_en["records"], f, indent=2, ensure_ascii=False)
         save_metrics_checkpoint(metrics, metrics_path)
+        print(f"[Flores-IN Completed in {time.time() - t0:.1f}s] en->mr: {flores_en_mr['summary']['corpus_chrf_pp']:.2f} chrF++, mr->en: {flores_mr_en['summary']['corpus_chrf_pp']:.2f} chrF++", flush=True)
 
     # 3. Held-out Bits Per Character (BPC)
     if run_bpc and ("heldout_bpc" not in metrics or force):
-        print("\n--- [3/4] Running Held-out BPC ---")
+        print("\n--- [3/4] Running Held-out BPC ---", flush=True)
+        t0 = time.time()
+        bpc_partial = str(run_dir / "bpc_partial.jsonl")
+        if force and Path(bpc_partial).exists():
+            Path(bpc_partial).unlink()
+
         ref_texts = load_marathi_reference_texts(limit=bpc_limit)
-        bpc_res = compute_bpc(model, tokenizer, ref_texts, device=device)
+        bpc_res = compute_bpc(model, tokenizer, ref_texts, checkpoint_path=bpc_partial, device=device)
         bpc_s = bpc_res["summary"]
         metrics["heldout_bpc"] = {
             "flores_mr_dev": bpc_s["bits_per_character"],
@@ -227,8 +251,9 @@ def run_full_evaluation(
         with open(run_dir / "bpc_records.json", "w", encoding="utf-8") as f:
             json.dump(bpc_res["records"], f, indent=2, ensure_ascii=False)
         save_metrics_checkpoint(metrics, metrics_path)
+        print(f"[BPC Completed in {time.time() - t0:.1f}s] BPC: {bpc_s['bits_per_character']:.4f}, BPB: {bpc_s['bits_per_byte']:.4f}, Perplexity: {bpc_s['token_perplexity']:.2f}", flush=True)
     elif "heldout_bpc" in metrics:
-        print("\n--- [3/4] BPC already completed in checkpoint; skipping ---")
+        print("\n--- [3/4] BPC already completed in checkpoint; skipping ---", flush=True)
 
     # 4. Automatic Generation Metrics
     if all_generations:
@@ -258,7 +283,8 @@ def run_full_evaluation(
 
     # 5. IndicIFEval (Harness subprocess)
     if run_ifeval and ("instruction_following" not in metrics or force):
-        print("\n--- [4/4] Running IndicIFEval ---")
+        print("\n--- [4/4] Running IndicIFEval ---", flush=True)
+        t0 = time.time()
         try:
             ifeval_out = run_dir / "ifeval"
             is_preq = metrics.get("quant") == "prequantized-bnb-4bit"
@@ -271,16 +297,17 @@ def run_full_evaluation(
                 device=device,
             )
             metrics["instruction_following"] = ifeval_res
+            print(f"[IndicIFEval Completed in {time.time() - t0:.1f}s]", flush=True)
         except Exception as e:
-            print(f"Warning: IndicIFEval execution failed: {e}")
+            print(f"Warning: IndicIFEval execution failed: {e}", flush=True)
             metrics["instruction_following"] = {"error": str(e)}
         save_metrics_checkpoint(metrics, metrics_path)
     elif "instruction_following" in metrics:
-        print("\n--- [4/4] IndicIFEval already completed in checkpoint; skipping ---")
+        print("\n--- [4/4] IndicIFEval already completed in checkpoint; skipping ---", flush=True)
 
-    print(f"\n==========================================")
-    print(f"Finished evaluation! Saved to: {metrics_path}")
-    print(f"==========================================\n")
+    print(f"\n==========================================", flush=True)
+    print(f"Finished evaluation! Saved to: {metrics_path}", flush=True)
+    print(f"==========================================\n", flush=True)
     return metrics
 
 

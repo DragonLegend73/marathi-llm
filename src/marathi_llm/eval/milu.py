@@ -1,6 +1,7 @@
 """MILU Marathi multiple-choice evaluation via next-token log-likelihood scoring."""
 
 import os
+import sys
 import json
 import argparse
 from pathlib import Path
@@ -9,6 +10,7 @@ from collections import Counter
 
 import torch
 import numpy as np
+from tqdm import tqdm
 from datasets import load_dataset
 
 from marathi_llm.eval.stats import bootstrap_ci
@@ -65,6 +67,7 @@ def evaluate_milu(
     split: str = "validation",
     batch_size: int = 2,
     prompt_format: str = "chat",
+    checkpoint_path: Optional[str] = None,
     device: str = "cuda:0",
 ) -> Dict[str, Any]:
     """Evaluates a model on MILU Marathi split using next-token logits over A-D."""
@@ -86,11 +89,38 @@ def evaluate_milu(
     letter_masses = []
     truncated_count = 0
 
+    # Load existing checkpoint if resuming
+    if checkpoint_path and Path(checkpoint_path).exists():
+        try:
+            with open(checkpoint_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        r = json.loads(line)
+                        records.append(r)
+                        correct_list.append(1.0 if r.get("correct") else 0.0)
+                        predicted_letters.append(r.get("predicted", "A"))
+                        letter_masses.append(r.get("option_letters_prob_mass", 0.0))
+        except Exception as e:
+            print(f"Warning: could not read partial checkpoint {checkpoint_path}: {e}")
+
     model.eval()
 
     # Process in batches
     n_items = len(ds)
-    for start_idx in range(0, n_items, batch_size):
+    start_offset = len(records)
+    pbar = tqdm(
+        total=n_items,
+        desc="Evaluating MILU",
+        unit="item",
+        mininterval=1.0,
+        file=sys.stdout,
+        dynamic_ncols=True,
+    )
+    if start_offset > 0:
+        pbar.update(start_offset)
+
+    for start_idx in range(start_offset, n_items, batch_size):
         batch_slice = [ds[i] for i in range(start_idx, min(start_idx + batch_size, n_items))]
         prompts = []
 
@@ -155,8 +185,23 @@ def evaluate_milu(
                 "option_letters_prob_mass": option_mass,
             })
 
-        if (start_idx // batch_size) % 20 == 0:
-            print(f"Processed {len(records)}/{n_items} questions...")
+            if checkpoint_path:
+                Path(checkpoint_path).parent.mkdir(parents=True, exist_ok=True)
+                with open(checkpoint_path, "a", encoding="utf-8") as f:
+                    f.write(json.dumps(records[-1], ensure_ascii=False) + "\n")
+
+        pbar.update(len(batch_slice))
+        current_acc = sum(correct_list) / len(correct_list) if correct_list else 0.0
+        current_mass = sum(letter_masses) / len(letter_masses) if letter_masses else 0.0
+        pbar.set_postfix({"acc": f"{current_acc:.1%}", "opt_mass": f"{current_mass:.2f}"})
+
+    pbar.close()
+
+    if checkpoint_path and Path(checkpoint_path).exists():
+        try:
+            Path(checkpoint_path).unlink()
+        except Exception:
+            pass
 
     if truncated_count > 0:
         print(f"Warning: {truncated_count} MILU prompts were left-truncated at max_length=1024.")

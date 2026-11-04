@@ -1,0 +1,126 @@
+{
+  "run_id": "base_qwen25_1p5b",
+  "git_commit": "2e12a67671d5cdff3cf348475c10ee8bfcbd62f0",
+  "indicifeval_commit": "1bb5f1bc4936cb20b8544e185bfd7cbed8f31464",
+  "model": "unsloth/Qwen2.5-1.5B-Instruct-bnb-4bit",
+  "adapter": "none",
+  "prompt_format": "chat",
+  "decoding": {
+    "strategy": "greedy",
+    "temperature": null,
+    "repetition_penalty": 1.0,
+    "max_new_tokens": 256
+  },
+  "environment": {
+    "torch": "2.14.1+cu132",
+    "transformers": "5.17.0",
+    "peft": "0.21.2",
+    "sacrebleu": "2.6.0",
+    "device": "cuda:0",
+    "batch_size": 2
+  },
+  "quant": "prequantized-bnb-4bit",
+  "adapter_loaded": false,
+  "milu_mr": {
+    "split": "validation",
+    "acc": 27.160493827160494,
+    "ci95": [
+      24.19753086419753,
+      30.373456790123456
+    ],
+    "chance_level": 25.0,
+    "mean_option_letters_prob_mass": 0.1730379655724571,
+    "by_domain": {
+      "Arts & Humanities": 31.46067415730337,
+      "Business Studies": 20.0,
+      "Engineering & Tech": 23.333333333333332,
+      "Environmental Sciences": 25.31645569620253,
+      "Health & Medicine": 12.5,
+      "Law & Governance": 26.027397260273972,
+      "Science": 29.166666666666668,
+      "Social Sciences": 32.142857142857146
+    },
+    "pred_letter_dist": {
+      "A": 98.51851851851852,
+      "B": 0.12345679012345678,
+      "C": 0.7407407407407408,
+      "D": 0.6172839506172839
+    },
+    "n": 810,
+    "shots": 0
+  },
+  "flores": {
+    "en_mr_chrfpp": 9.338086534000489,
+    "mr_en_chrfpp": 25.86906444765396,
+    "ci95": {
+      "en_mr": [
+        9.051618334329943,
+        9.597040930741946
+      ],
+      "mr_en": [
+        25.170804009820884,
+        26.567661807172765
+      ]
+    },
+    "mean_sentence_chrfpp": {
+      "en_mr": 9.342772614903359,
+      "mr_en": 26.48813607991794
+    }
+  },
+  "heldout_bpc": {
+    "flores_mr_dev": 2.958580750350302,
+    "flores_mr_dev_bpb": 1.1078735902594823,
+    "perplexity": 8.461194044488415,
+    "n_sentences": 997,
+    "ci95": [
+      2.9963610374800425,
+      3.0485973007165943
+    ],
+    "bos_token_id_used": 151645
+  },
+  "auto": {
+    "script_purity": 90.76695452030467,
+    "lang_id_mr": 63.390170511534606,
+    "repeat_4gram": 54.062186559679034,
+    "distinct_4grams_ratio": 0.5694043924215153,
+    "eos_rate": 37.412236710130394,
+    "mean_len_tokens": 198.9027081243731,
+    "english_leak_ratio": 0.0894603943690834,
+    "empty_output_rate": 0.0
+  },
+  "instruction_following": {
+    "max_gen_toks": 1280,
+    "ground_mr": {
+      "prompt_level_strict_acc": 8.571428571428571,
+      "prompt_level_strict_acc_stderr": 1.4984934835723356,
+      "prompt_level_loose_acc": 16.57142857142857,
+      "prompt_level_loose_acc_stderr": 1.9903280548052107,
+      "inst_level_strict_acc": 8.571428571428571,
+      "inst_level_loose_acc": 16.57142857142857
+    },
+    "indicifeval_ground_mr": {
+      "prompt_level_strict_acc": 8.571428571428571,
+      "prompt_level_strict_acc_stderr": 1.4984934835723356,
+      "prompt_level_loose_acc": 16.57142857142857,
+      "prompt_level_loose_acc_stderr": 1.9903280548052107,
+      "inst_level_strict_acc": 8.571428571428571,
+      "inst_level_loose_acc": 16.57142857142857
+    },
+    "trans_mr": {
+      "prompt_level_strict_acc": 15.10204081632653,
+      "prompt_level_strict_acc_stderr": 1.6192429527119399,
+      "prompt_level_loose_acc": 18.367346938775512,
+      "prompt_level_loose_acc_stderr": 1.7510588443267399,
+      "inst_level_strict_acc": 23.58490566037736,
+      "inst_level_loose_acc": 27.088948787061994
+    },
+    "indicifeval_trans_mr": {
+      "prompt_level_strict_acc": 15.10204081632653,
+      "prompt_level_strict_acc_stderr": 1.6192429527119399,
+      "prompt_level_loose_acc": 18.367346938775512,
+      "prompt_level_loose_acc_stderr": 1.7510588443267399,
+      "inst_level_strict_acc": 23.58490566037736,
+      "inst_level_loose_acc": 27.088948787061994
+    }
+  }
+}

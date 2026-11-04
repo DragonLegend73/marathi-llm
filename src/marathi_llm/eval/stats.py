@@ -1,7 +1,9 @@
 """Statistical significance and bootstrap confidence interval helpers for model comparisons."""
 
+import sys
 from typing import List, Tuple, Dict, Any
 import numpy as np
+from tqdm import tqdm
 
 
 def bootstrap_ci(
@@ -51,7 +53,11 @@ def bootstrap_corpus_chrf(
     hyps_arr = np.array(hypotheses, dtype=object)
     refs_arr = np.array(references, dtype=object)
 
-    for _ in range(n_bootstraps):
+    iter_boot = range(n_bootstraps)
+    if n_bootstraps >= 100:
+        iter_boot = tqdm(iter_boot, desc="Bootstrap corpus chrF++ (CPU)", file=sys.stdout, mininterval=1.0, leave=False)
+
+    for _ in iter_boot:
         idxs = rng.integers(0, n, size=n)
         sub_hyps = hyps_arr[idxs].tolist()
         sub_refs = refs_arr[idxs].tolist()
@@ -99,7 +105,11 @@ def paired_bootstrap_corpus_chrf(
     refs_arr = np.array(references, dtype=object)
 
     boot_diffs = []
-    for _ in range(n_bootstraps):
+    iter_boot = range(n_bootstraps)
+    if n_bootstraps >= 100:
+        iter_boot = tqdm(iter_boot, desc="Paired bootstrap chrF++ (CPU)", file=sys.stdout, mininterval=1.0, leave=False)
+
+    for _ in iter_boot:
         idxs = rng.integers(0, n, size=n)
         s_a = sacrebleu.corpus_chrf(hyps_a_arr[idxs].tolist(), [refs_arr[idxs].tolist()], word_order=2).score
         s_b = sacrebleu.corpus_chrf(hyps_b_arr[idxs].tolist(), [refs_arr[idxs].tolist()], word_order=2).score

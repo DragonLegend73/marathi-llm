@@ -1,6 +1,7 @@
 """Deterministic batched generation runner for base models and LoRA adapters."""
 
 import os
+import sys
 import json
 import logging
 import argparse
@@ -8,6 +9,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional, Set, Tuple
 
 import torch
+from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig, BitsAndBytesConfig
 from peft import PeftModel
 
@@ -150,6 +152,7 @@ def generate_batch(
     max_new_tokens: int = 256,
     prompt_format: str = "chat",
     system_prompt: Optional[str] = None,
+    checkpoint_path: Optional[str] = None,
     device: str = "cuda:0",
 ) -> List[Dict[str, Any]]:
     """
@@ -197,11 +200,43 @@ def generate_batch(
     n_total = len(sorted_items)
     truncated_count = 0
 
+    # Load existing records if resuming from a checkpoint
+    completed_records = {}
+    if checkpoint_path and Path(checkpoint_path).exists():
+        try:
+            with open(checkpoint_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        rec = json.loads(line)
+                        if "id" in rec:
+                            completed_records[rec["id"]] = rec
+        except Exception as e:
+            logger.warning(f"Could not read partial checkpoint {checkpoint_path}: {e}")
+
+    for c in sorted_items:
+        if c["id"] in completed_records:
+            results_in_order[c["orig_idx"]] = completed_records[c["id"]]
+
+    pending_items = [c for c in sorted_items if c["id"] not in completed_records]
+    n_pending = len(pending_items)
+
     # Avoid double BOS: when prompt_format == "chat", chat template already rendered BOS
     add_special = (prompt_format != "chat")
 
-    for start in range(0, n_total, batch_size):
-        chunk = sorted_items[start : min(start + batch_size, n_total)]
+    pbar = tqdm(
+        total=n_total,
+        desc="Generating",
+        unit="item",
+        mininterval=1.0,
+        file=sys.stdout,
+        dynamic_ncols=True,
+    )
+    if completed_records:
+        pbar.update(len(completed_records))
+
+    for start in range(0, n_pending, batch_size):
+        chunk = pending_items[start : min(start + batch_size, n_pending)]
         batch_texts = [c["input_text"] for c in chunk]
 
         inputs = tokenizer(
@@ -232,6 +267,7 @@ def generate_batch(
             )
 
         prefix_len = inputs["input_ids"].shape[1]
+        chunk_records = []
 
         for i, c in enumerate(chunk):
             full_seq = outputs[i]
@@ -263,9 +299,23 @@ def generate_batch(
                 **c["meta"],
             }
             results_in_order[c["orig_idx"]] = record
+            chunk_records.append(record)
 
-        if (start // batch_size) % 25 == 0:
-            print(f"Generated {min(start + batch_size, n_total)}/{n_total} items...")
+        if checkpoint_path and chunk_records:
+            Path(checkpoint_path).parent.mkdir(parents=True, exist_ok=True)
+            with open(checkpoint_path, "a", encoding="utf-8") as f:
+                for cr in chunk_records:
+                    f.write(json.dumps(cr, ensure_ascii=False) + "\n")
+
+        pbar.update(len(chunk))
+
+    pbar.close()
+
+    if checkpoint_path and Path(checkpoint_path).exists():
+        try:
+            Path(checkpoint_path).unlink()
+        except Exception:
+            pass
 
     if truncated_count > 0:
         print(f"Warning: {truncated_count} prompts were left-truncated at max_length=2048.")

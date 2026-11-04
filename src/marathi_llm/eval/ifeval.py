@@ -58,19 +58,35 @@ def run_indicifeval(
         "--log_samples",
         "--seed", "42",
         "--gen_kwargs", "max_gen_toks=1280",
+        "--use_cache", str(out_path / "cache"),
         "--output_path", str(out_path),
     ]
 
     if limit is not None:
         cmd.extend(["--limit", str(limit)])
 
-    print(f"Running IndicIFEval command: {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    print(f"Running IndicIFEval command: {' '.join(cmd)}", flush=True)
+    process = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
 
-    if result.returncode != 0:
-        print("STDOUT:\n", result.stdout)
-        print("STDERR:\n", result.stderr)
-        raise RuntimeError(f"lm_eval failed with returncode {result.returncode}:\n{result.stderr}")
+    captured_lines = []
+    if process.stdout is not None:
+        for line in iter(process.stdout.readline, ""):
+            sys.stdout.write(line)
+            sys.stdout.flush()
+            captured_lines.append(line)
+        process.stdout.close()
+
+    returncode = process.wait()
+
+    if returncode != 0:
+        full_output = "".join(captured_lines)
+        raise RuntimeError(f"lm_eval failed with returncode {returncode}:\n{full_output}")
 
     # Look for the generated output JSON in out_path
     json_files = list(out_path.glob("**/results*.json"))

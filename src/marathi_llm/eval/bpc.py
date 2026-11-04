@@ -1,5 +1,6 @@
 """Held-out bits-per-character (BPC) evaluation on human-written Marathi."""
 
+import sys
 import json
 import math
 import argparse
@@ -8,6 +9,7 @@ from typing import List, Dict, Any, Optional
 
 import torch
 import numpy as np
+from tqdm import tqdm
 from huggingface_hub import hf_hub_download
 from marathi_llm.generate import load_model_and_tokenizer
 from marathi_llm.eval.stats import bootstrap_ci
@@ -36,6 +38,7 @@ def compute_bpc(
     model,
     tokenizer,
     texts: List[str],
+    checkpoint_path: Optional[str] = None,
     device: str = "cuda:0",
 ) -> Dict[str, Any]:
     """
@@ -54,17 +57,48 @@ def compute_bpc(
     total_bytes = 0
     total_tokens = 0
 
+    per_sentence_records = []
+    sentence_bpcs = []
+
+    # Restore from checkpoint if resuming
+    if checkpoint_path and Path(checkpoint_path).exists():
+        try:
+            with open(checkpoint_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        r = json.loads(line)
+                        per_sentence_records.append(r)
+                        total_nll += r.get("nll", 0.0)
+                        total_chars += r.get("chars", 0)
+                        total_bytes += r.get("bytes", 0)
+                        total_tokens += r.get("tokens", 0)
+                        sentence_bpcs.append(r.get("bpc", 0.0))
+        except Exception as e:
+            print(f"Warning: could not read partial checkpoint {checkpoint_path}: {e}")
+
     model.eval()
 
     # Documented BOS convention: use bos_token_id if available, else eos_token_id
     bos_id = tokenizer.bos_token_id if tokenizer.bos_token_id is not None else tokenizer.eos_token_id
     ln2 = math.log(2.0)
 
-    per_sentence_records = []
-    sentence_bpcs = []
+    start_idx = len(per_sentence_records)
+    pbar = tqdm(
+        total=len(texts),
+        desc="Computing BPC",
+        unit="sent",
+        mininterval=1.0,
+        file=sys.stdout,
+        dynamic_ncols=True,
+    )
+    if start_idx > 0:
+        pbar.update(start_idx)
 
-    for idx, text in enumerate(texts):
+    for idx in range(start_idx, len(texts)):
+        text = texts[idx]
         if not text:
+            pbar.update(1)
             continue
 
         raw_ids = tokenizer.encode(text, add_special_tokens=False)
@@ -75,6 +109,7 @@ def compute_bpc(
             input_ids = raw_ids
 
         if len(input_ids) < 2:
+            pbar.update(1)
             continue
 
         input_tensor = torch.tensor([input_ids], dtype=torch.long, device=device)
@@ -98,7 +133,7 @@ def compute_bpc(
         total_bytes += byte_count
 
         sentence_bpcs.append(sent_bpc)
-        per_sentence_records.append({
+        rec = {
             "idx": idx,
             "text": text,
             "nll": float(seq_nll),
@@ -107,10 +142,25 @@ def compute_bpc(
             "tokens": n_predicted,
             "bpc": sent_bpc,
             "bpb": sent_bpb,
-        })
+        }
+        per_sentence_records.append(rec)
 
-        if (idx + 1) % 100 == 0 or (idx + 1) == len(texts):
-            print(f"Evaluated BPC on {idx + 1}/{len(texts)} sentences...")
+        if checkpoint_path:
+            Path(checkpoint_path).parent.mkdir(parents=True, exist_ok=True)
+            with open(checkpoint_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
+        pbar.update(1)
+        running_bpc = total_nll / (ln2 * total_chars) if total_chars > 0 else 0.0
+        pbar.set_postfix({"bpc": f"{running_bpc:.4f}"})
+
+    pbar.close()
+
+    if checkpoint_path and Path(checkpoint_path).exists():
+        try:
+            Path(checkpoint_path).unlink()
+        except Exception:
+            pass
 
     bpc = total_nll / (ln2 * total_chars) if total_chars > 0 else 0.0
     bpb = total_nll / (ln2 * total_bytes) if total_bytes > 0 else 0.0
