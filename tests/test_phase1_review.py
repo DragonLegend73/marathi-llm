@@ -119,3 +119,26 @@ def test_generate_batch_checkpoint_resume(tmp_path):
     assert results[1]["id"] == "item_2"
     # Checkpoint should be unlinked upon successful completion of all items
     assert not ckpt_file.exists()
+
+
+def test_invalid_adapter_path_raises(monkeypatch):
+    """Verifies D1: invalid adapter path raises RuntimeError instead of silently falling back to base."""
+    from unittest.mock import MagicMock
+    import transformers
+    import peft
+    from marathi_llm.generate import load_model_and_tokenizer
+
+    mock_model = MagicMock()
+    mock_tokenizer = MagicMock()
+
+    monkeypatch.setattr(transformers.AutoTokenizer, "from_pretrained", lambda *args, **kwargs: mock_tokenizer)
+    monkeypatch.setattr(transformers.AutoModelForCausalLM, "from_pretrained", lambda *args, **kwargs: mock_model)
+    monkeypatch.setattr(peft.PeftModel, "from_pretrained", MagicMock(side_effect=OSError("Adapter directory or file not found")))
+
+    with pytest.raises(RuntimeError, match="Failed to load LoRA adapter"):
+        load_model_and_tokenizer(
+            model_id="mock_model",
+            adapter_path="nonexistent/fake-adapter-path-xyz",
+            prequantized=True,
+        )
+

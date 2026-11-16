@@ -10,11 +10,11 @@ from collections import Counter
 
 import torch
 import numpy as np
-from tqdm import tqdm
 from datasets import load_dataset
 
 from marathi_llm.eval.stats import bootstrap_ci
 from marathi_llm.generate import prepare_prompt, load_model_and_tokenizer
+from marathi_llm.progress import get_progress_bar
 
 
 OPTION_MAP = {
@@ -109,13 +109,11 @@ def evaluate_milu(
     # Process in batches
     n_items = len(ds)
     start_offset = len(records)
-    pbar = tqdm(
+    pbar = get_progress_bar(
         total=n_items,
         desc="Evaluating MILU",
         unit="item",
-        mininterval=1.0,
-        file=sys.stdout,
-        dynamic_ncols=True,
+        mininterval=2.0,
     )
     if start_offset > 0:
         pbar.update(start_offset)

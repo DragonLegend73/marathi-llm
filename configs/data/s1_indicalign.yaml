@@ -1,0 +1,29 @@
+name: s1_indicalign
+source_id: S1
+hf_repo: ai4bharat/indic-align
+license: CC-BY-4.0
+origin: Mixed (Dolly_T, OpenAssistant_T, WikiHow, Wiki_Conv, Wiki_Chat, Anudesh, HHRLHF_T)
+configs:
+  - Dolly_T
+  - OpenAssistant_T
+  - WikiHow
+  - Anudesh
+  - Wiki_Conv
+  - Wiki_Chat
+  - HHRLHF_T
+skip_configs:
+  - IndoWordNet # skip lexical dictionary rows per plan
+clean:
+  min_devanagari_purity: 60.0
+  max_seq_len: 512
+  min_response_chars: 10
+  max_repeat_ngram_frac: 0.25
+  max_latin_ratio: 0.15
+  require_mr_lang_id: true
+dedup:
+  minhash_threshold: 0.8
+  ngram_size: 5
+budget:
+  train_samples: 12000
+  dev_samples: 500
+  seed: 42

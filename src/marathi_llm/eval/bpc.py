@@ -9,10 +9,10 @@ from typing import List, Dict, Any, Optional
 
 import torch
 import numpy as np
-from tqdm import tqdm
 from huggingface_hub import hf_hub_download
 from marathi_llm.generate import load_model_and_tokenizer
 from marathi_llm.eval.stats import bootstrap_ci
+from marathi_llm.progress import get_progress_bar
 
 
 def load_marathi_reference_texts(limit: Optional[int] = None) -> List[str]:
@@ -84,13 +84,11 @@ def compute_bpc(
     ln2 = math.log(2.0)
 
     start_idx = len(per_sentence_records)
-    pbar = tqdm(
+    pbar = get_progress_bar(
         total=len(texts),
         desc="Computing BPC",
         unit="sent",
-        mininterval=1.0,
-        file=sys.stdout,
-        dynamic_ncols=True,
+        mininterval=2.0,
     )
     if start_idx > 0:
         pbar.update(start_idx)

@@ -1,0 +1,35 @@
+{
+  "max_gen_toks": 1280,
+  "ground_mr": {
+    "prompt_level_strict_acc": 8.571428571428571,
+    "prompt_level_strict_acc_stderr": 1.4984934835723356,
+    "prompt_level_loose_acc": 16.57142857142857,
+    "prompt_level_loose_acc_stderr": 1.9903280548052107,
+    "inst_level_strict_acc": 8.571428571428571,
+    "inst_level_loose_acc": 16.57142857142857
+  },
+  "indicifeval_ground_mr": {
+    "prompt_level_strict_acc": 8.571428571428571,
+    "prompt_level_strict_acc_stderr": 1.4984934835723356,
+    "prompt_level_loose_acc": 16.57142857142857,
+    "prompt_level_loose_acc_stderr": 1.9903280548052107,
+    "inst_level_strict_acc": 8.571428571428571,
+    "inst_level_loose_acc": 16.57142857142857
+  },
+  "trans_mr": {
+    "prompt_level_strict_acc": 15.10204081632653,
+    "prompt_level_strict_acc_stderr": 1.6192429527119399,
+    "prompt_level_loose_acc": 18.367346938775512,
+    "prompt_level_loose_acc_stderr": 1.7510588443267399,
+    "inst_level_strict_acc": 23.58490566037736,
+    "inst_level_loose_acc": 27.088948787061994
+  },
+  "indicifeval_trans_mr": {
+    "prompt_level_strict_acc": 15.10204081632653,
+    "prompt_level_strict_acc_stderr": 1.6192429527119399,
+    "prompt_level_loose_acc": 18.367346938775512,
+    "prompt_level_loose_acc_stderr": 1.7510588443267399,
+    "inst_level_strict_acc": 23.58490566037736,
+    "inst_level_loose_acc": 27.088948787061994
+  }
+}

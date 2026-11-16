@@ -9,9 +9,9 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional, Set, Tuple
 
 import torch
-from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig, BitsAndBytesConfig
 from peft import PeftModel
+from marathi_llm.progress import get_progress_bar
 
 logger = logging.getLogger(__name__)
 
@@ -224,13 +224,11 @@ def generate_batch(
     # Avoid double BOS: when prompt_format == "chat", chat template already rendered BOS
     add_special = (prompt_format != "chat")
 
-    pbar = tqdm(
+    pbar = get_progress_bar(
         total=n_total,
         desc="Generating",
         unit="item",
-        mininterval=1.0,
-        file=sys.stdout,
-        dynamic_ncols=True,
+        mininterval=2.0,
     )
     if completed_records:
         pbar.update(len(completed_records))

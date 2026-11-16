@@ -1,0 +1,25 @@
+name: s3_aya
+source_id: S3
+hf_repo: CohereForAI/aya_dataset
+split: train
+license: Apache-2.0
+origin: Human-curated crowdsourced Marathi instructions
+language: Marathi
+language_code: mar
+eval_heldout:
+  native_prompts_count: 100
+  bpc_responses_count: 500
+clean:
+  min_devanagari_purity: 60.0
+  max_seq_len: 512
+  min_response_chars: 10
+  max_repeat_ngram_frac: 0.25
+  max_latin_ratio: 0.15
+  require_mr_lang_id: true
+dedup:
+  minhash_threshold: 0.8
+  ngram_size: 5
+budget:
+  train_samples: null # use all valid training samples after holdouts
+  dev_samples: 500
+  seed: 42
