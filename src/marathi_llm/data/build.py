@@ -40,7 +40,7 @@ def build_dataset_pipeline(
     print(f"Config: {config_path}")
     print(f"==========================================\n")
 
-    tracker = FunnelTracker(source_name)
+    tracker = FunnelTracker(source_name, pipeline_version="2.1")
     deduplicator = DatasetDeduplicator(
         threshold=cfg.get("dedup", {}).get("minhash_threshold", 0.8),
         shingle_size=cfg.get("dedup", {}).get("ngram_size", 5),
@@ -166,6 +166,14 @@ def build_dataset_pipeline(
                 f.write(json.dumps(p, ensure_ascii=False) + "\n")
         print(f"Saved {len(native_eval_prompts)} held-out native evaluation prompts to data/eval/native_prompts.jsonl")
 
+    if bpc_eval_responses:
+        eval_dir = Path("data/eval")
+        eval_dir.mkdir(parents=True, exist_ok=True)
+        with open(eval_dir / "bpc_responses.jsonl", "w", encoding="utf-8") as f:
+            for r in bpc_eval_responses:
+                f.write(json.dumps({"response": r}, ensure_ascii=False) + "\n")
+        print(f"Saved {len(bpc_eval_responses)} held-out BPC evaluation responses to data/eval/bpc_responses.jsonl")
+
     # Sample Fixed Budget: 12k train, 500 dev
     budget_cfg = cfg.get("budget", {})
     seed = budget_cfg.get("seed", 42)
@@ -216,8 +224,19 @@ def main():
     parser = argparse.ArgumentParser(description="Marathi LLM Dataset Builder")
     parser.add_argument("--config", default="configs/data/s0_alpaca.yaml")
     parser.add_argument("--output-dir", default="data/processed")
+    parser.add_argument("--tokenizer-name", default="unsloth/Qwen2.5-1.5B-Instruct-bnb-4bit")
+    parser.add_argument("--skip-tokenizer", action="store_true")
     parser.add_argument("--skip-decontamination", action="store_true")
     args = parser.parse_args()
+
+    tokenizer = None
+    if not args.skip_tokenizer:
+        try:
+            from transformers import AutoTokenizer
+            print(f"Loading tokenizer: {args.tokenizer_name}...")
+            tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_name)
+        except Exception as e:
+            print(f"Warning: could not load tokenizer {args.tokenizer_name}: {e}")
 
     decontaminator = None
     if not args.skip_decontamination:
@@ -229,6 +248,7 @@ def main():
         config_path=args.config,
         output_dir=args.output_dir,
         eval_decontaminator=decontaminator,
+        tokenizer=tokenizer,
     )
 
 

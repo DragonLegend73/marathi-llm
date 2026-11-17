@@ -90,8 +90,22 @@ def validate_example(
 
     # Token length bounds
     if tokenizer is not None:
-        full_text = f"{instruction}\n{input_text}\n{response}".strip()
-        toks = tokenizer.encode(full_text, add_special_tokens=False)
+        if input_text and input_text.strip():
+            formatted = (
+                "खाली एक सूचना आहे जी एखाद्या कार्याचे वर्णन करते, पुढील संदर्भ प्रदान करणार्या इनपुटसह जोडली जाते. "
+                "विनंती योग्य रितीने पूर्ण करणारा प्रतिसाद लिहा.\n\n"
+                f"### सूचना:\n{instruction}\n\n### इनपुट:\n{input_text}\n\n### प्रतिसाद:\n{response}"
+            )
+        else:
+            formatted = (
+                "खाली एक सूचना आहे जी एखाद्या कार्याचे वर्णन करते. "
+                "विनंती योग्य रितीने पूर्ण करणारा प्रतिसाद लिहा.\n\n"
+                f"### सूचना:\n{instruction}\n\n### प्रतिसाद:\n{response}"
+            )
+        eos = getattr(tokenizer, "eos_token", "") or ""
+        if eos:
+            formatted = f"{formatted}{eos}"
+        toks = tokenizer.encode(formatted, add_special_tokens=False)
         if len(toks) > max_seq_len:
             return False, f"exceeds_max_seq_len ({len(toks)} > {max_seq_len})"
 

@@ -79,8 +79,11 @@ def compute_bpc(
 
     model.eval()
 
-    # Documented BOS convention: use bos_token_id if available, else eos_token_id
-    bos_id = tokenizer.bos_token_id if tokenizer.bos_token_id is not None else tokenizer.eos_token_id
+    # Documented BOS convention: use bos_token_id if available, else <|endoftext|>, else eos_token_id
+    bos_id = tokenizer.bos_token_id
+    if bos_id is None:
+        eot = tokenizer.convert_tokens_to_ids("<|endoftext|>")
+        bos_id = eot if eot is not None and eot != getattr(tokenizer, "unk_token_id", None) else tokenizer.eos_token_id
     ln2 = math.log(2.0)
 
     start_idx = len(per_sentence_records)

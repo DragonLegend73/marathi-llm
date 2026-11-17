@@ -8,8 +8,9 @@ from typing import Dict, Any, List
 class FunnelTracker:
     """Tracks counts of accepted and rejected rows through data cleaning stages."""
 
-    def __init__(self, source_name: str):
+    def __init__(self, source_name: str, pipeline_version: str = "2.1"):
         self.source_name = source_name
+        self.pipeline_version = pipeline_version
         self.counts = {
             "raw_ingested": 0,
             "failed_empty_or_short": 0,
@@ -34,6 +35,7 @@ class FunnelTracker:
 
     def to_dict(self) -> Dict[str, Any]:
         return {
+            "pipeline_version": self.pipeline_version,
             "source": self.source_name,
             "counts": self.counts,
             "rejection_details": self.rejection_details,

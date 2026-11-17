@@ -1,4 +1,4 @@
-# legacy, superseded by src/marathi_llm/train.py
+# legacy v0 pilot training script (full-sequence loss, uncleaned raw data)
 """
 train.py — Marathi LLM Fine-Tuning with QLoRA + Unsloth
 ---------------------------------------------------------

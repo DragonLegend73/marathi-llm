@@ -28,12 +28,23 @@ def extract_s0_alpaca_row(row: Dict[str, Any], row_idx: int) -> Optional[Dict[st
             else:
                 instruction = raw_inst
     else:
-        instruction = row.get("instruction", "").strip()
-        input_text = row.get("input", "").strip()
-        response = row.get("output", "").strip()
+        # If translated_text lacks proper Marathi markers, do not fall back to English raw fields
+        return None
 
     if not instruction or not response:
         return None
+
+    PLACEHOLDER_INPUTS = {
+        "इनपुट नाही",
+        "इनपुट नाही.",
+        "noinput",
+        "no input",
+        "none",
+        "नाही",
+        "n/a",
+    }
+    if input_text.lower().strip() in PLACEHOLDER_INPUTS:
+        input_text = ""
 
     return {
         "id": f"s0_{row_idx}",

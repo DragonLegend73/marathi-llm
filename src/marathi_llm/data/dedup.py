@@ -1,22 +1,21 @@
 """Exact and near-duplicate deduplication using MinHash LSH (datasketch)."""
 
-import re
 import hashlib
 from typing import List, Dict, Any, Tuple, Set, Generator
 from datasketch import MinHash, MinHashLSH
 
-WORD_PATTERN = re.compile(r"\w+")
+from marathi_llm.data.text import words
 
 
 def get_word_shingles(text: str, n: int = 5) -> List[str]:
     """Extracts word n-grams (shingles) from text, adapting to 3-grams for short texts."""
-    words = WORD_PATTERN.findall(text.lower())
-    if not words:
+    w_list = words(text)
+    if not w_list:
         return []
-    actual_n = n if len(words) >= 20 else max(1, min(3, len(words)))
-    if len(words) < actual_n:
-        return [" ".join(words)]
-    return [" ".join(words[i : i + actual_n]) for i in range(len(words) - actual_n + 1)]
+    actual_n = n if len(w_list) >= 20 else max(1, min(3, len(w_list)))
+    if len(w_list) < actual_n:
+        return [" ".join(w_list)]
+    return [" ".join(w_list[i : i + actual_n]) for i in range(len(w_list) - actual_n + 1)]
 
 
 def compute_minhash(text: str, num_perm: int = 128, shingle_size: int = 5) -> MinHash:

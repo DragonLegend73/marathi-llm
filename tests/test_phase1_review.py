@@ -142,3 +142,20 @@ def test_invalid_adapter_path_raises(monkeypatch):
             prequantized=True,
         )
 
+
+def test_alpaca_v0_preamble_matches_dataset_translated_text():
+    """Asserts that eval-time ALPACAV0_PROMPT_* templates match raw training preambles character-for-character."""
+    from marathi_llm.generate import prepare_prompt
+    # Case 1: with input
+    inst = "विचित्र ओळखा."
+    inp = "ट्विटर, इन्स्टाग्राम, टेलिव्हिजन"
+    p1 = prepare_prompt(inst, tokenizer=None, prompt_format="alpaca_v0", input_text=inp)
+    assert p1.startswith("खाली एक सूचना आहे जी एखाद्या कार्याचे वर्णन करते, पुढील संदर्भ प्रदान करणार्या इनपुटसह जोडली जाते. विनंती योग्य रितीने पूर्ण करणारा प्रतिसाद लिहा.")
+    assert "### सूचना:\nविचित्र ओळखा.\n\n### इनपुट:\nट्विटर, इन्स्टाग्राम, टेलिव्हिजन\n\n### प्रतिसाद:\n" in p1
+
+    # Case 2: without input
+    p2 = prepare_prompt(inst, tokenizer=None, prompt_format="alpaca_v0", input_text="")
+    assert p2.startswith("खाली एक सूचना आहे जी एखाद्या कार्याचे वर्णन करते. विनंती योग्य रितीने पूर्ण करणारा प्रतिसाद लिहा.")
+    assert "### सूचना:\nविचित्र ओळखा.\n\n### प्रतिसाद:\n" in p2
+
+
