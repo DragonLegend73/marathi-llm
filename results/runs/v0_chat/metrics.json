@@ -1,0 +1,91 @@
+{
+  "run_id": "v0_chat",
+  "git_commit": "1cd6b0f4ceb86190cd9450a56b7ffca4514a2759",
+  "indicifeval_commit": "1bb5f1bc4936cb20b8544e185bfd7cbed8f31464",
+  "model": "unsloth/Qwen2.5-1.5B-Instruct-bnb-4bit",
+  "adapter": "DragonLegend/marathi-qwen2.5-lora",
+  "prompt_format": "chat",
+  "decoding": {
+    "strategy": "greedy",
+    "temperature": null,
+    "repetition_penalty": 1.0,
+    "max_new_tokens": 256
+  },
+  "environment": {
+    "torch": "2.14.1+cu132",
+    "transformers": "5.17.0",
+    "peft": "0.21.2",
+    "sacrebleu": "2.6.0",
+    "device": "cuda:0",
+    "batch_size": 4
+  },
+  "quant": "prequantized-bnb-4bit",
+  "adapter_loaded": true,
+  "milu_mr": {
+    "split": "validation",
+    "acc": 33.33333333333333,
+    "ci95": [
+      30.12345679012346,
+      36.54320987654321
+    ],
+    "chance_level": 25.0,
+    "mean_option_letters_prob_mass": 0.28746918633337315,
+    "by_domain": {
+      "Arts & Humanities": 34.831460674157306,
+      "Business Studies": 25.0,
+      "Engineering & Tech": 28.333333333333332,
+      "Environmental Sciences": 27.848101265822784,
+      "Health & Medicine": 22.5,
+      "Law & Governance": 35.61643835616438,
+      "Science": 35.833333333333336,
+      "Social Sciences": 42.142857142857146
+    },
+    "pred_letter_dist": {
+      "A": 58.0246913580247,
+      "B": 33.20987654320987,
+      "C": 5.3086419753086425,
+      "D": 3.45679012345679
+    },
+    "n": 810,
+    "shots": 0
+  },
+  "flores": {
+    "en_mr_chrfpp": 14.388951323510458,
+    "mr_en_chrfpp": 29.693644350517474,
+    "ci95": {
+      "en_mr": [
+        13.979995092786622,
+        14.784190263009968
+      ],
+      "mr_en": [
+        28.705951518029202,
+        30.70321481956328
+      ]
+    },
+    "mean_sentence_chrfpp": {
+      "en_mr": 14.568814285174648,
+      "mr_en": 31.26791781392508
+    }
+  },
+  "heldout_bpc": {
+    "flores_mr_dev": 2.1941926427475416,
+    "flores_mr_dev_bpb": 0.821639930075878,
+    "perplexity": 4.873237005589144,
+    "n_sentences": 997,
+    "ci95": [
+      2.2145208059128625,
+      2.264878247388049
+    ],
+    "bos_token_id_used": 151643
+  },
+  "auto": {
+    "script_purity": 99.99718738705602,
+    "lang_id_mr": 97.69307923771315,
+    "repeat_4gram": 27.482447342026077,
+    "distinct_4grams_ratio": 0.7957487994939958,
+    "eos_rate": 69.20762286860582,
+    "mean_len_tokens": 149.31193580742226,
+    "english_leak_ratio": 2.812612943988532e-05,
+    "empty_output_rate": 0.0
+  }
+}

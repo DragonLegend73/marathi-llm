@@ -1,0 +1,91 @@
+{
+  "run_id": "base_alpaca",
+  "git_commit": "1cd6b0f4ceb86190cd9450a56b7ffca4514a2759",
+  "indicifeval_commit": "1bb5f1bc4936cb20b8544e185bfd7cbed8f31464",
+  "model": "unsloth/Qwen2.5-1.5B-Instruct-bnb-4bit",
+  "adapter": "none",
+  "prompt_format": "alpaca_v0",
+  "decoding": {
+    "strategy": "greedy",
+    "temperature": null,
+    "repetition_penalty": 1.0,
+    "max_new_tokens": 256
+  },
+  "environment": {
+    "torch": "2.14.1+cu132",
+    "transformers": "5.17.0",
+    "peft": "0.21.2",
+    "sacrebleu": "2.6.0",
+    "device": "cuda:0",
+    "batch_size": 4
+  },
+  "quant": "prequantized-bnb-4bit",
+  "adapter_loaded": false,
+  "milu_mr": {
+    "split": "validation",
+    "acc": 26.543209876543212,
+    "ci95": [
+      23.580246913580247,
+      29.629629629629626
+    ],
+    "chance_level": 25.0,
+    "mean_option_letters_prob_mass": 0.04154782892092718,
+    "by_domain": {
+      "Arts & Humanities": 30.89887640449438,
+      "Business Studies": 18.333333333333332,
+      "Engineering & Tech": 23.333333333333332,
+      "Environmental Sciences": 25.31645569620253,
+      "Health & Medicine": 15.0,
+      "Law & Governance": 27.397260273972602,
+      "Science": 27.500000000000004,
+      "Social Sciences": 30.0
+    },
+    "pred_letter_dist": {
+      "A": 99.50617283950616,
+      "B": 0.12345679012345678,
+      "C": 0.12345679012345678,
+      "D": 0.24691358024691357
+    },
+    "n": 810,
+    "shots": 0
+  },
+  "flores": {
+    "en_mr_chrfpp": 10.593458789989501,
+    "mr_en_chrfpp": 12.4837963642144,
+    "ci95": {
+      "en_mr": [
+        10.423114860712614,
+        10.758543928913998
+      ],
+      "mr_en": [
+        12.108828025931942,
+        12.850269504952191
+      ]
+    },
+    "mean_sentence_chrfpp": {
+      "en_mr": 10.431264241705962,
+      "mr_en": 12.769591100877705
+    }
+  },
+  "heldout_bpc": {
+    "flores_mr_dev": 2.858357526382952,
+    "flores_mr_dev_bpb": 1.0703438851970326,
+    "perplexity": 7.870720674033674,
+    "n_sentences": 997,
+    "ci95": [
+      2.885852074569075,
+      2.936032369059328
+    ],
+    "bos_token_id_used": 151643
+  },
+  "auto": {
+    "script_purity": 93.82789275168388,
+    "lang_id_mr": 91.97592778335006,
+    "repeat_4gram": 64.79438314944834,
+    "distinct_4grams_ratio": 0.4916104538264931,
+    "eos_rate": 0.0,
+    "mean_len_tokens": 256.0,
+    "english_leak_ratio": 0.06171424432415826,
+    "empty_output_rate": 0.0
+  }
+}

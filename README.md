@@ -2,32 +2,70 @@
 
 Fine-tuning and evaluating Marathi language models under a **4 GB VRAM budget** (RTX 3050 Ti Laptop GPU) using **QLoRA + Unsloth**.
 
-Marathi is spoken by over 83 million people but remains significantly under-represented in open-weights LLMs. This project is a systematic study comparing base model architectures and instruction data sources for Marathi under strict consumer hardware constraints, using standardized benchmark suites, judge-free quality metrics, and error analysis.
+Marathi is spoken by over 83 million people but remains under-represented in open-weights LLMs. This repository implements a reproducible evaluation harness and audited Marathi instruction data pipeline to benchmark a pilot QLoRA adapter (`DragonLegend/marathi-qwen2.5-lora` on `Qwen2.5-1.5B-Instruct`) against the unadapted base model under matched prompt formats.
 
 ---
 
-## What I found when I audited my own evaluation
+## Benchmark Results (Base vs. Pilot v0 Adapter)
 
-The original report claimed **+10.44 chrF++** on 10 hand-picked prompts. An audit revealed that **four of them were in the training data**:
-- Prompts 1 and 2 were **Rows 0 and 1** of the training split ($100\%$ exact match).
+All four runs were executed from commit `1cd6b0f` with greedy decoding (`max_new_tokens=256`, 4-bit NF4 base weights). Neither format pairing is fully fair on its own (`alpaca_v0` is native to `v0` and off-template for `base`; `chat` is the reverse), so the most conservative headline compares each model in its best prompt format:
+
+| Metric | Base (best format) | v0 (best format) | Δ |
+|---|---|---|---|
+| **MILU-Marathi val acc (%)** | 27.16 *(chat)* | **35.06** *(alpaca)* | **+7.90 pp** |
+| **Flores en→mr chrF++** | 10.59 *(alpaca)* | **14.44** *(alpaca)* | **+3.85** |
+| **Flores mr→en chrF++** | 25.47 *(chat)* | **29.69** *(chat)* | **+4.22** |
+| **Held-out Marathi BPC** *(lower is better)* | 2.858 | **2.194** | **−0.664** |
+
+### Full 2×2 Matrix (All Four Runs)
+
+| Metric | Base (chat) | Base (alpaca) | v0 (alpaca) | v0 (chat) |
+|---|---|---|---|---|
+| **MILU-Marathi val acc (%)** | 27.16 [24.20, 30.37] | 26.54 [23.58, 29.63] | **35.06** [31.85, 38.40] | 33.33 [30.12, 36.54] |
+| **MILU predicted-letter spread (A/B/C/D %)** | 98.5 / 0.1 / 0.7 / 0.6 | 99.5 / 0.1 / 0.1 / 0.2 | 48.9 / 38.4 / 7.5 / 5.2 | 58.0 / 33.2 / 5.3 / 3.5 |
+| **Flores en→mr chrF++** | 9.45 [9.16, 9.73] | 10.59 [10.42, 10.76] | **14.44** [14.05, 14.84] | 14.39 [13.98, 14.78] |
+| **Flores mr→en chrF++** | 25.47 [24.71, 26.15] | 12.48 [12.11, 12.85] | 29.33 [28.34, 30.29] | **29.69** [28.71, 30.70] |
+| **Held-out Marathi BPC** *(lower is better)* | 2.858 | 2.858 | **2.194** | **2.194** |
+
+*Footnotes:*
+- BPC does not depend on prompt format, so the duplicate columns are expected.
+- Runs used batch size 4 (`base_chat` was resumed mid-run after changing batch size, so its `metrics.json` still records batch size 2); repeated runs differ by about ±1 MILU question and ±0.1–0.4 chrF++, which is small against the gaps.
+
+*Summary of findings:*
+- **MILU-Marathi**: Letter bias reduced (`99.5%` A → `48.9%` A / `38.4%` B under `alpaca_v0`; `98.5%` A → `58.0%` A / `33.2%` B under `chat`), lifting zero-shot validation accuracy by `+7.90` pp on the best-of-format comparison (`27.16%` → `35.06%`). Base puts only `4%` (`alpaca`) to `17%` (`chat`) of its probability mass on the letters A–D (vs. `29%`–`47%` for v0), so its near-chance score reflects an answer-format failure as much as missing knowledge.
+- **Flores-IN & BPC**: Gains on Flores and BPC, with 95% bootstrap CIs (`+3.85` en→mr chrF++ and `+4.22` mr→en chrF++ on best-of-format). `Base (alpaca)` drops to `12.48` on mr→en because it breaks off its native template (`0.0%` EOS rate), so the `chat` figure (`+4.22`) is reported rather than the alpaca gap. Flores and matched-format MILU intervals do not overlap (for MILU under `chat`, the intervals nearly touch: `[24.20, 30.37]` vs. `[30.12, 36.54]`). Held-out Marathi BPC improves from `2.858` to `2.194` (`−0.664`; token-level perplexity `7.87` → `4.87`, BOS `<|endoftext|>`).
+- **Generation stats on translation outputs**: Devanagari script purity rises from `91.9%` (`Base chat`) / `93.8%` (`Base alpaca`) to `100.0%` (`v0`), 4-gram repetition drops from `55.7%` / `64.8%` to `29.9%` (`v0 alpaca`) / `27.5%` (`v0 chat`), and EOS termination rate rises from `36.6%` (`Base chat`) / `0.0%` (`Base alpaca`) to `67.7%` (`v0 alpaca`) / `69.2%` (`v0 chat`), though roughly one-third of v0 translations still hit the 256-token cap.
+
+### Evaluation Notes & Caveats
+
+> v0 is a pilot QLoRA adapter (`Qwen2.5-1.5B-Instruct`, trained on Alpaca-Marathi, ~52k machine-translated examples, template matched to training data). Evaluation is zero-shot with greedy decoding: MILU (810 validation questions, next-token scoring over A–D), Flores-IN translation (chrF++, 997 sentences per direction), and held-out Marathi BPC. Intervals are bootstrap 95% CIs. MILU scores are close to chance and strongly affected by option-letter bias, so the predicted-letter distribution is reported alongside accuracy. Generation-quality statistics (script purity, repetition, EOS rate) were measured on translation outputs only. Contamination checks found no overlap detected between the training data and Flores or MILU.
+
+Full per-run outputs are saved in [`results/runs/`](results/runs/):
+- [`results/runs/base_chat/metrics.json`](results/runs/base_chat/metrics.json)
+- [`results/runs/base_alpaca/metrics.json`](results/runs/base_alpaca/metrics.json)
+- [`results/runs/v0_alpaca/metrics.json`](results/runs/v0_alpaca/metrics.json)
+- [`results/runs/v0_chat/metrics.json`](results/runs/v0_chat/metrics.json)
+
+---
+
+## Data Pipeline Audit & Fix
+
+> While auditing the data pipeline I found that word tokenization used `\w+`, which splits Devanagari words at vowel signs, so the "8-word" overlap check actually matched ~3-word spans and rejected 11,378 rows (~22%) as false benchmark contamination. I fixed tokenization (shared [`text.py`](src/marathi_llm/data/text.py) helper excluding danda punctuation `।`/`॥`), widened the decontamination index to MILU val/test, Flores, XQuAD-IN, IndicIFEval, and native prompts, and applied the 512-token length filter, which had silently not been running. Re-auditing the v0 training data with the fixed matcher found 1 overlapping row out of 52,002 (an IndicIFEval riddle prompt at n=8, no overlap detected with Flores or MILU). Regression tests cover the tokenizer bug and prompt-template parity. The rebuilt 12k S0 set (30,509 clean rows after filtering 51,973 ingested rows; 17,220 filtered by max sequence length, 2 deduplicated, 0 decontaminated) is saved in [`data/processed/`](data/processed/) for later experiments; v0 itself was trained on the raw dataset.
+
+Audit artifacts:
+- [`results/audit_v0_contamination.json`](results/audit_v0_contamination.json)
+- [`data/processed/s0_alpaca.stats.json`](data/processed/s0_alpaca.stats.json)
+
+---
+
+## Initial Leakage Audit (Why the Harness Was Rebuilt)
+
+The original v0 report claimed **+10.44 chrF++** on 10 hand-picked prompts. An audit revealed that **four of them were in the training data**:
+- Prompts 1 and 2 were **Rows 0 and 1** of the training split (100% exact match).
 - Prompt 3 was a **near-match** in train (Row 10004: `"पाण्याचे महत्त्व सांगणारी काही वाक्ये लिहा"`).
 - Prompt 4 was **contained in a training instruction** (Row 37982: `"एका प्रश्नाचे उत्तर द्या - भारताची राजधानी कोणती आहे?"`).
 
-The largest gains (+33.07 and +25.06) came directly from those memorized rows. The **4 contaminated prompts averaged +19.73 chrF++**, whereas the **6 unseen prompts averaged +4.25** (evaluated under the original protocol: sampling at temperature 0.7, one sample per prompt, scored against hand-written references). Furthermore, at least three of the ten reference answers traced directly to training responses.
-
-A re-score on 200 prompts from new hash-split manifests gave:
-
-| Metric | Base Model (`Qwen2.5-1.5B`) | Fine-Tuned v0 Adapter | Measured Delta (Δ) | Original v0 Claim |
-|---|---|---|---|---|
-| **Corpus chrF++** | 17.75 | **22.37** | **+4.62** | *+10.44 (inflated by leakage)* |
-| **EOS Rate (%)** | 1.00% | **81.50%** | **+80.50 pp** | *Not measured* |
-| **Script Purity (%)** | **95.88%** | 93.69% | **-2.20 pp** | *Not measured* |
-| **Mean Output Length** | 255.6 tokens | **123.6 tokens** | -131.9 tokens | *Not measured* |
-
-*Notes on the 200-prompt re-score:*
-- Prompts were drawn from new hash-split manifests; because v0 originally trained on an unmanifested random 95% split, some prompts may overlap v0's original training data.
-- **chrF++ against machine-translated reference answers rose about 4.6 points on this set (n=200, no confidence interval). Fluency and correctness are not yet measured; that is Phase 1.**
-- Under the v0 prompt template, the fine-tuned model ended answers naturally 81.5% of the time versus 1.0% for the base (+80.5 pp). This will be re-measured with the native chat template in Phase 1.
+The largest gains (`+33.07` and `+25.06`) came directly from those memorized rows. The **4 contaminated prompts averaged +19.73 chrF++**, whereas the **6 unseen prompts averaged +4.25** (under the original protocol: sampling at temperature 0.7, one sample per prompt, scored against hand-written references). Furthermore, at least three of the ten reference answers traced directly to training responses.
 
 For the full methodology and individual prompt matches, see [`docs/legacy/leakage_audit.md`](docs/legacy/leakage_audit.md). The original v0 documentation is preserved in [`docs/legacy/v0_baseline.md`](docs/legacy/v0_baseline.md).
 
@@ -46,64 +84,59 @@ Detailed telemetry is logged in [`results/hw_profile.json`](results/hw_profile.j
 
 ---
 
-## Upgrade Plan & Roadmap
-
-We are upgrading this project from a single-dataset fine-tune into an end-to-end reproducible study:
-
-- [x] **Phase 0 — Baseline Audit & Clean Splits**: Audit train/test leakage, document findings, commit deterministic split manifests (`data/splits/`), profile hardware on the 4 GB GPU.
-- [ ] **Phase 1 — Rigorous Evaluation Harness**: Native MCQ benchmark (MILU - Marathi), standard generation benchmarks (IndicGenBench Flores-IN translation & XQuAD-IN QA), verifiable instruction-following (IndicIFEval), held-out bits-per-character (BPC), and English regression checks.
-- [ ] **Phase 2 — Data Pipeline**: Ingest and clean diverse Marathi sources (S0: Alpaca, S1: IndicAlign, S2: SandLogic, S3: Aya) with strict decontamination against all eval sets.
-- [ ] **Phase 3 — Model Selection (Stage A)**: Benchmark candidate base models (Qwen2.5-1.5B, Qwen3-1.7B, Gemma-3-1B, Llama-3.2-1B) under equal training budgets.
-- [ ] **Phase 4 — Data Selection (Stage B)**: Compare data sources and construct data scaling curves.
-- [ ] **Phase 5 — Final Training & Ablations (Stage C)**: Measure noise-floor across seeds, ablate response-only loss masking, and release final adapter + GGUF.
-
----
-
 ## Repository Structure
 
 ```
 marathi-llm/
 ├── configs/             # Model, data, and training YAML configs
 ├── data/
+│   ├── processed/       # Rebuilt S0 datasets and pipeline stats (pipeline_version 2.1)
 │   ├── splits/          # Committed split manifests (s0_test_ids.json, etc.)
 │   └── eval/            # Eval prompt suites
 ├── docs/
-│   └── legacy/          # v0 baseline numbers and leakage audit
-│       ├── v0_baseline.md
-│       └── leakage_audit.md
+│   └── legacy/          # Original v0 notes and leakage audit
 ├── results/
-│   ├── hw_profile.json  # VRAM, throughput, and thermal profile
-│   └── v0_rescore.json  # Re-evaluation on 200 test prompts
-├── scripts/             # Audit, profiling, and evaluation runners
-├── src/marathi_llm/     # Package source (data, eval, train, aggregate)
-├── requirements.lock    # Pinned dependency lockfile
-└── plan.md              # Upgrade plan
+│   ├── runs/            # 4-way evaluation metrics (base_chat, base_alpaca, v0_alpaca, v0_chat)
+│   ├── audit_v0_contamination.json
+│   └── hw_profile.json  # VRAM, throughput, and thermal profile
+├── scripts/             # Audit, profiling, and helper scripts
+├── src/marathi_llm/     # Package source (data/, eval/, generate.py, aggregate.py)
+├── tests/               # Unit and regression tests (tokenizer, template parity, data pipeline)
+└── requirements.lock    # Pinned dependency lockfile
 ```
 
 ---
 
-## Setup & Quickstart
+## Setup & Reproduction
 
-### 1. Environment Setup (using `uv`)
+### 1. Environment Setup
 
 ```bash
-# In fish:
-source .venv/bin/activate.fish
-
 # In bash/zsh:
 source .venv/bin/activate
+
+# In fish:
+source .venv/bin/activate.fish
 ```
 
-### 2. Verify GPU & Environment
+### 2. Run Test Suite
 
 ```bash
-python -c "import torch, unsloth; print(torch.cuda.get_device_name(0), 'ready!')"
+PYTHONPATH=src .venv/bin/pytest
 ```
 
-### 3. Re-run Audit & Profiling
+### 3. Reproduce the 4-Way Evaluation
 
 ```bash
-python scripts/audit_baseline.py
-python scripts/rescore_v0.py
-python scripts/profile_hardware.py
+PYTHONPATH=src .venv/bin/python -m marathi_llm.eval.runner --run-id base_chat   --prompt-format chat      --skip-ifeval
+PYTHONPATH=src .venv/bin/python -m marathi_llm.eval.runner --run-id base_alpaca --prompt-format alpaca_v0 --skip-ifeval
+PYTHONPATH=src .venv/bin/python -m marathi_llm.eval.runner --run-id v0_alpaca   --prompt-format alpaca_v0 --skip-ifeval --adapter DragonLegend/marathi-qwen2.5-lora
+PYTHONPATH=src .venv/bin/python -m marathi_llm.eval.runner --run-id v0_chat     --prompt-format chat      --skip-ifeval --adapter DragonLegend/marathi-qwen2.5-lora
+```
+
+### 4. Rebuild S0 Dataset & Run Contamination Audit
+
+```bash
+PYTHONPATH=src .venv/bin/python -m marathi_llm.data.build --config configs/data/s0_alpaca.yaml
+PYTHONPATH=src .venv/bin/python scripts/audit_v0_contamination.py
 ```
