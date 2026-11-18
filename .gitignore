@@ -12,6 +12,8 @@ outputs/
 
 # Training artifacts — regeneratable
 evals/
+results/runs/*/checkpoints/
+results/runs/*/adapter/
 
 # Hugging Face cache
 .cache/
@@ -34,6 +36,8 @@ outputs_gguf/
 # Data artifacts
 data/raw/
 data/processed/*.jsonl
+data/processed/**/*.jsonl
+results/length_census/worst_case_pools/
 
 # Environment secrets
 .env

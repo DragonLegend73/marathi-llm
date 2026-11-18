@@ -4,10 +4,10 @@ hf_repo: SandLogicTechnologies/Indic_Chat_Dataset
 split: marathi
 license: Apache-2.0
 origin: Curated Indic multi-turn and single-turn chat
-sample_limit: 200000 # reservoir sample / limit before filtering per plan
+sample_limit: 100000 # cap stream before filtering for bounded RAM on 14 GB host
 clean:
   min_devanagari_purity: 60.0
-  max_seq_len: 512
+  max_seq_len: 768
   min_response_chars: 10
   max_repeat_ngram_frac: 0.25
   max_latin_ratio: 0.15

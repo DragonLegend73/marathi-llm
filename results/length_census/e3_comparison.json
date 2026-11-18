@@ -1,0 +1,110 @@
+{
+  "run_a": "E3_s1_6k_cap512",
+  "run_b": "E3_s1_6k_cap768",
+  "verdict": "ADOPT 768",
+  "adopt_768": true,
+  "bpc_improves_excl_0": true,
+  "milu": {
+    "n": 810,
+    "a": 27.41,
+    "b": 27.41,
+    "delta": 0.0,
+    "ci95": [
+      -1.48,
+      1.48
+    ],
+    "crosses_zero": true,
+    "mcnemar_b_wins": 19,
+    "mcnemar_a_wins": 19,
+    "mcnemar_p": 1.0
+  },
+  "flores_en_mr": {
+    "n": 200,
+    "a": 9.85,
+    "b": 9.92,
+    "delta": 0.07,
+    "ci95": [
+      -0.63,
+      0.77
+    ],
+    "crosses_zero": true
+  },
+  "flores_mr_en": {
+    "n": 200,
+    "a": 21.67,
+    "b": 24.76,
+    "delta": 3.09,
+    "ci95": [
+      0.76,
+      5.23
+    ],
+    "crosses_zero": false
+  },
+  "heldout_bpc": {
+    "n": 997,
+    "a": 2.3245,
+    "b": 2.2879,
+    "delta": -0.0366,
+    "ci95": [
+      -0.0408,
+      -0.0323
+    ],
+    "crosses_zero": false
+  },
+  "auto_a": {
+    "script_purity": 99.69200986700987,
+    "lang_id_mr": 96.5,
+    "repeat_4gram": 71.5,
+    "distinct_4grams_ratio": 0.486242276201186,
+    "eos_rate": 23.0,
+    "mean_len_tokens": 218.785,
+    "english_leak_ratio": 0.00307990132990133,
+    "empty_output_rate": 0.0
+  },
+  "auto_b": {
+    "script_purity": 99.77462686567164,
+    "lang_id_mr": 96.5,
+    "repeat_4gram": 70.5,
+    "distinct_4grams_ratio": 0.5000862613988967,
+    "eos_rate": 27.0,
+    "mean_len_tokens": 208.39,
+    "english_leak_ratio": 0.0022537313432835823,
+    "empty_output_rate": 0.0
+  },
+  "data_stats": {
+    "512": {
+      "train_path": "data/processed/e3_s1_cap512_6k.jsonl",
+      "dev_path": "data/processed/e3_s1_cap512_dev500.jsonl",
+      "n_train": 6000,
+      "n_dev": 500,
+      "mean_chat_tokens": 244.44,
+      "rows_gt_512": 0,
+      "pct_rows_gt_512": 0.0,
+      "by_subconfig": {
+        "S1_Dolly_T": 1766,
+        "S1_HHRLHF_T": 971,
+        "S1_OpenAssistant_T": 696,
+        "S1_WikiHow": 7,
+        "S1_Wiki_Chat": 267,
+        "S1_Wiki_Conv": 2293
+      }
+    },
+    "768": {
+      "train_path": "data/processed/e3_s1_cap768_6k.jsonl",
+      "dev_path": "data/processed/e3_s1_cap768_dev500.jsonl",
+      "n_train": 6000,
+      "n_dev": 500,
+      "mean_chat_tokens": 320.18,
+      "rows_gt_512": 1222,
+      "pct_rows_gt_512": 20.37,
+      "by_subconfig": {
+        "S1_Dolly_T": 1602,
+        "S1_HHRLHF_T": 1307,
+        "S1_OpenAssistant_T": 807,
+        "S1_WikiHow": 41,
+        "S1_Wiki_Chat": 374,
+        "S1_Wiki_Conv": 1869
+      }
+    }
+  }
+}

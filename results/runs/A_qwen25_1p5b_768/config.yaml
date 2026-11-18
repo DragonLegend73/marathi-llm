@@ -1,0 +1,51 @@
+run_id: A_qwen25_1p5b_768
+git_commit: 58ecf24a224210d041bd839278f4a53b8a0e4fcc
+model_config: configs/models/qwen25_1p5b.yaml
+hf_id: unsloth/Qwen2.5-1.5B-Instruct-bnb-4bit
+quant: prequantized-bnb-4bit
+data_path: data/processed/s0_alpaca_12k.jsonl
+eval_data_path: data/processed/s0_alpaca_dev500.jsonl
+max_seq_len: 768
+has_chat_template: true
+enable_thinking: null
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.0
+  use_rslora: false
+  target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - gate_proj
+  - up_proj
+  - down_proj
+train:
+  lr: 0.0002
+  epochs: 1.0
+  max_steps: -1
+  per_device_batch: 2
+  grad_accum: 4
+  effective_batch: 8
+  gradient_checkpointing: unsloth
+  response_only_loss: true
+  seed: 0
+  save_steps: 250
+  eval_steps: 250
+  bf16: true
+  fp16: false
+train_length_stats:
+  total: 12000
+  kept: 12000
+  dropped: 0
+  pct_examples_kept: 100.0
+  mean_tokens_kept: 324.5
+  max_seq_len: 768
+eval_length_stats:
+  total: 500
+  kept: 500
+  dropped: 0
+  pct_examples_kept: 100.0
+  mean_tokens_kept: 326.22
+  max_seq_len: 768

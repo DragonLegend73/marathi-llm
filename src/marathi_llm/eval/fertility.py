@@ -132,7 +132,7 @@ def compute_truncation_rate(tokenizer, full_examples: List[str], max_len: int = 
 def analyze_tokenizers(
     tokenizer_ids: List[str],
     data: Dict[str, List[str]],
-    max_len: int = 512,
+    max_len: int = 768,
 ) -> Dict[str, Dict[str, Any]]:
     """Analyzes multiple tokenizers across native and translated Marathi."""
     results = {}
@@ -144,14 +144,16 @@ def analyze_tokenizers(
             s0_res = compute_text_fertility(tokenizer, data["s0_responses"])
             all_texts = data["flores"] + data["s0_responses"]
             combined_res = compute_text_fertility(tokenizer, all_texts)
-            trunc_pct = compute_truncation_rate(tokenizer, data["s0_full_examples"], max_len=max_len)
+            trunc_512 = compute_truncation_rate(tokenizer, data["s0_full_examples"], max_len=512)
+            trunc_768 = compute_truncation_rate(tokenizer, data["s0_full_examples"], max_len=max_len)
 
             results[tid] = {
                 "flores_tokens_per_word": flores_res["tokens_per_word"],
                 "s0_tokens_per_word": s0_res["tokens_per_word"],
                 "combined_tokens_per_word": combined_res["tokens_per_word"],
                 "combined_tokens_per_char": combined_res["tokens_per_char"],
-                "pct_exceeding_512": trunc_pct,
+                "pct_exceeding_512": trunc_512,
+                "pct_exceeding_768": trunc_768,
                 "n_flores": len(data["flores"]),
                 "n_s0_responses": len(data["s0_responses"]),
                 "n_s0_full_examples": len(data["s0_full_examples"]),

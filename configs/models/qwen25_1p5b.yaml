@@ -1,6 +1,6 @@
 name: qwen25_1p5b
 hf_id: unsloth/Qwen2.5-1.5B-Instruct-bnb-4bit
-max_seq_len: 512
+max_seq_len: 768
 prequantized: true       # true: checkpoint is already bnb-4bit; do not pass load_in_4bit to lm_eval
 load_in_4bit: true       # for full-precision repos quantized on load
 lora:

@@ -6,7 +6,7 @@ origin: Machine-translated English Alpaca
 sample_limit: null
 clean:
   min_devanagari_purity: 60.0
-  max_seq_len: 512
+  max_seq_len: 768
   min_response_chars: 10
   max_repeat_ngram_frac: 0.25
   max_latin_ratio: 0.15

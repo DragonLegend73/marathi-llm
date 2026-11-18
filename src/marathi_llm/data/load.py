@@ -69,6 +69,7 @@ def stream_s1_indicalign(
     dataset_name: str = "ai4bharat/indic-align",
     configs: Optional[List[str]] = None,
     streaming: bool = True,
+    per_config_limit: Optional[int] = None,
 ) -> Generator[Dict[str, Any], None, None]:
     """Streams Marathi rows from IndicAlign-Instruct across configs."""
     target_configs = configs or [
@@ -84,6 +85,7 @@ def stream_s1_indicalign(
     for cfg in target_configs:
         try:
             ds = load_dataset(dataset_name, cfg, split="train", streaming=streaming)
+            cfg_count = 0
             for idx, row in enumerate(ds):
                 mar_turns = row.get("mar_Deva", [])
                 if not mar_turns or not isinstance(mar_turns, list):
@@ -102,6 +104,11 @@ def stream_s1_indicalign(
                                 "response": a_msg,
                                 "source": f"S1_{cfg}",
                             }
+                            cfg_count += 1
+                            if per_config_limit and cfg_count >= per_config_limit:
+                                break
+                if per_config_limit and cfg_count >= per_config_limit:
+                    break
         except Exception as e:
             print(f"Warning: could not stream IndicAlign config '{cfg}': {e}")
 

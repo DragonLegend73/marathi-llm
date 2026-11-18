@@ -1,0 +1,48 @@
+{
+  "counts": {
+    "raw_ingested": 90000,
+    "passed_clean_768": 50889,
+    "failed_quality": 6709,
+    "exceeds_768": 32402,
+    "failed_dedup": 8511,
+    "failed_decontam": 15
+  },
+  "pool_512_size": 33322,
+  "pool_768_size": 42363,
+  "arms": {
+    "512": {
+      "train_path": "data/processed/e3_s1_cap512_6k.jsonl",
+      "dev_path": "data/processed/e3_s1_cap512_dev500.jsonl",
+      "n_train": 6000,
+      "n_dev": 500,
+      "mean_chat_tokens": 244.44,
+      "rows_gt_512": 0,
+      "pct_rows_gt_512": 0.0,
+      "by_subconfig": {
+        "S1_Dolly_T": 1766,
+        "S1_HHRLHF_T": 971,
+        "S1_OpenAssistant_T": 696,
+        "S1_WikiHow": 7,
+        "S1_Wiki_Chat": 267,
+        "S1_Wiki_Conv": 2293
+      }
+    },
+    "768": {
+      "train_path": "data/processed/e3_s1_cap768_6k.jsonl",
+      "dev_path": "data/processed/e3_s1_cap768_dev500.jsonl",
+      "n_train": 6000,
+      "n_dev": 500,
+      "mean_chat_tokens": 320.18,
+      "rows_gt_512": 1222,
+      "pct_rows_gt_512": 20.37,
+      "by_subconfig": {
+        "S1_Dolly_T": 1602,
+        "S1_HHRLHF_T": 1307,
+        "S1_OpenAssistant_T": 807,
+        "S1_WikiHow": 41,
+        "S1_Wiki_Chat": 374,
+        "S1_Wiki_Conv": 1869
+      }
+    }
+  }
+}

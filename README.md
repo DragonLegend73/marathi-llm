@@ -84,6 +84,29 @@ Detailed telemetry is logged in [`results/hw_profile.json`](results/hw_profile.j
 
 ---
 
+## Sequence-Length Study & Rebuild (`max_seq_len = 768`)
+
+Before screening models and data sources, we conducted a sequence-length study (E1–E4) to avoid truncating long conversational rows:
+- **E1 Census**: Under the chat template, `cap=512` rejected 53% of S1 (IndicAlign) and 71% of S2 (SandLogic).
+- **E2 Worst-Case Probes**: Tested 100 worst-case steps (`batch=2 × accum=4`) on the RTX 3050 Ti Laptop GPU (4 GB VRAM) across sequence caps `{512, 768, 1024, 1536, 2048}`. Peak reserved VRAM grew by only ~40–100 MB per step (`1.42 GB` at 512 → `1.70 GB` at 2048) with zero OOMs.
+- **E3 Paired Mini-Experiment (S1-6k)**: Paired item-level evaluation showed held-out Marathi BPC improved significantly (`2.3245 → 2.2879`, paired 95% CI `[−0.0408, −0.0323]`), Flores mr→en gained `+3.09` chrF++ (`[+0.76, +5.23]`), and MILU had zero regressions.
+- **Pre-Registered Decision**: **Adopted `max_seq_len = 768`**. S0–S3 datasets were rebuilt under `pipeline_version: "2.2"` using chat-template length counting and uniform sampling for S1.
+
+### Stage A Control & Baseline Retraining (`A_qwen25_1p5b_768`)
+
+The baseline control was retrained from scratch at `max_seq_len = 768` (12k S0, 1,500 steps, response-only loss, `batch=2 × accum=4`, seed 0) and fully evaluated on dev (`n=810` MILU, full `n=997` Flores, `n=997` BPC):
+
+| Metric | Base (Zero-shot `chat`) | Control 512 (`A_qwen25_1p5b`) | **Control 768 (`A_qwen25_1p5b_768`)** | Δ vs Base | Δ vs Control 512 |
+|---|---:|---:|---:|---:|---:|
+| **MILU dev acc (%)** *(n=810)* | 27.16 `[24.20, 30.37]` | 28.64 `[25.68, 31.98]` | **29.14** `[25.93, 32.22]` | +1.98 pp | +0.50 pp |
+| **Flores en→mr chrF++** *(n=997)* | 10.37 `[10.05, 10.70]` | 10.70 `[10.40, 11.03]` | **11.20** `[10.86, 11.56]` | **+0.83** | **+0.50** |
+| **Flores mr→en chrF++** *(n=997)* | 25.47 `[24.58, 26.39]` | 28.26 `[27.48, 29.09]` | **28.86** `[27.91, 29.78]` | **+3.39** | **+0.60** |
+| **Held-out Marathi BPC** *(n=997)* | 2.8584 | 2.2342 | **2.1724** | **−0.6860** | **−0.0618** |
+| 4-gram Repetition (%) | 71.5 | 60.48 | **55.37** | **−16.13 pp** | **−5.11 pp** |
+| EOS Completion Rate (%) | 23.0 | 37.11 | **42.43** | +19.43 pp | +5.32 pp |
+
+---
+
 ## Repository Structure
 
 ```

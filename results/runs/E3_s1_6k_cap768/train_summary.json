@@ -1,0 +1,29 @@
+{
+  "run_id": "E3_s1_6k_cap768",
+  "git_commit": "58ecf24a224210d041bd839278f4a53b8a0e4fcc",
+  "model": "unsloth/Qwen2.5-1.5B-Instruct-bnb-4bit",
+  "quant": "prequantized-bnb-4bit",
+  "data": "e3_s1_cap768_6k",
+  "max_seq_len": 768,
+  "seed": 0,
+  "profile_only": false,
+  "train": {
+    "steps": 750,
+    "elapsed_s": 2698.47,
+    "final_train_loss": 0.95176,
+    "final_dev_loss": 0.8563,
+    "pct_examples_kept": 100.0,
+    "mean_tokens_kept": 320.18,
+    "per_device_batch": 2,
+    "grad_accum": 4,
+    "peak_vram_gb": 1.423,
+    "peak_vram_reserved_gb": 1.48,
+    "gpu_temp_c": 47.28,
+    "steps_per_s": 0.2779,
+    "samples_per_s": 2.2235,
+    "tokens_per_s": 711.9,
+    "full_1epoch_steps": 750,
+    "full_1epoch_eta_min": 45.0,
+    "response_only_loss": true
+  }
+}

@@ -34,6 +34,40 @@ def normalize_marathi_text(text: str) -> str:
     return text.strip()
 
 
+def count_training_tokens(
+    instruction: str,
+    response: str,
+    tokenizer,
+    input_text: str = "",
+) -> int:
+    """
+    Counts exact training tokens using the tokenizer's chat template (matching
+    `marathi_llm.train`), falling back to plain prompt-response + EOS if the
+    tokenizer defines no chat template.
+    """
+    user_content = f"{instruction.strip()}\n\n{input_text.strip()}" if (input_text and input_text.strip()) else instruction.strip()
+    resp_text = response.strip()
+
+    if getattr(tokenizer, "chat_template", None):
+        messages = [
+            {"role": "user", "content": user_content},
+            {"role": "assistant", "content": resp_text},
+        ]
+        try:
+            rendered = tokenizer.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=False
+            )
+            return len(tokenizer.encode(rendered, add_special_tokens=False))
+        except Exception:
+            pass
+
+    formatted = f"### सूचना:\n{user_content}\n\n### प्रतिसाद:\n{resp_text}"
+    eos = getattr(tokenizer, "eos_token", "") or ""
+    if eos:
+        formatted = f"{formatted}{eos}"
+    return len(tokenizer.encode(formatted, add_special_tokens=False))
+
+
 def validate_example(
     instruction: str,
     response: str,
@@ -44,7 +78,7 @@ def validate_example(
     max_repeat_ngram_frac: float = 0.25,
     require_mr_lang_id: bool = False,
     tokenizer=None,
-    max_seq_len: int = 512,
+    max_seq_len: int = 768,
 ) -> Tuple[bool, Optional[str]]:
     """
     Validates a cleaned (instruction, input, response) triple against quality thresholds.
@@ -88,25 +122,10 @@ def validate_example(
             if detected is not None and detected != Language.MARATHI:
                 return False, f"language_id_mismatch ({detected.name})"
 
-    # Token length bounds
+    # Token length bounds (chat-template counter matching marathi_llm.train)
     if tokenizer is not None:
-        if input_text and input_text.strip():
-            formatted = (
-                "खाली एक सूचना आहे जी एखाद्या कार्याचे वर्णन करते, पुढील संदर्भ प्रदान करणार्या इनपुटसह जोडली जाते. "
-                "विनंती योग्य रितीने पूर्ण करणारा प्रतिसाद लिहा.\n\n"
-                f"### सूचना:\n{instruction}\n\n### इनपुट:\n{input_text}\n\n### प्रतिसाद:\n{response}"
-            )
-        else:
-            formatted = (
-                "खाली एक सूचना आहे जी एखाद्या कार्याचे वर्णन करते. "
-                "विनंती योग्य रितीने पूर्ण करणारा प्रतिसाद लिहा.\n\n"
-                f"### सूचना:\n{instruction}\n\n### प्रतिसाद:\n{response}"
-            )
-        eos = getattr(tokenizer, "eos_token", "") or ""
-        if eos:
-            formatted = f"{formatted}{eos}"
-        toks = tokenizer.encode(formatted, add_special_tokens=False)
-        if len(toks) > max_seq_len:
-            return False, f"exceeds_max_seq_len ({len(toks)} > {max_seq_len})"
+        n_toks = count_training_tokens(instruction, response, tokenizer, input_text=input_text)
+        if n_toks > max_seq_len:
+            return False, f"exceeds_max_seq_len ({n_toks} > {max_seq_len})"
 
     return True, None

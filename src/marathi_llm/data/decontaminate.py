@@ -44,6 +44,7 @@ class BenchmarkDecontaminator:
         self.eval_ngrams: Dict[str, Set[str]] = collections.defaultdict(set)
         self.lsh = MinHashLSH(threshold=minhash_threshold, num_perm=128)
         self.eval_texts: Dict[str, str] = {}
+        self.tag_counts: Dict[str, int] = collections.Counter()
         self.total_indexed = 0
 
     def add_eval_text(self, text: str, source_tag: str):
@@ -54,6 +55,7 @@ class BenchmarkDecontaminator:
 
         doc_id = f"{source_tag}_{self.total_indexed}"
         self.eval_texts[doc_id] = norm_text
+        self.tag_counts[source_tag] += 1
 
         # 1. Index word n-grams
         ngrams = extract_word_ngrams(norm_text, n=self.ngram_size)
@@ -159,7 +161,7 @@ def load_all_eval_targets(decontaminator: BenchmarkDecontaminator):
             except Exception as e:
                 print(f"Warning: could not read IndicIFEval {cfg}: {e}")
 
-    # 5. Held-out Aya prompts if existing
+    # 5. Held-out Aya prompts & BPC responses if existing
     native_eval_path = Path("data/eval/native_prompts.jsonl")
     if native_eval_path.exists():
         try:
@@ -173,5 +175,17 @@ def load_all_eval_targets(decontaminator: BenchmarkDecontaminator):
                             decontaminator.add_eval_text(obj.get("reference"), "aya_native_ref")
         except Exception as e:
             print(f"Warning: could not read native_prompts.jsonl: {e}")
+
+    bpc_eval_path = Path("data/eval/bpc_responses.jsonl")
+    if bpc_eval_path.exists():
+        try:
+            with open(bpc_eval_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    if line.strip():
+                        obj = json.loads(line)
+                        if obj.get("response"):
+                            decontaminator.add_eval_text(obj.get("response"), "aya_bpc_resp")
+        except Exception as e:
+            print(f"Warning: could not read bpc_responses.jsonl: {e}")
 
     print(f"Decontamination index ready: {decontaminator.total_indexed:,} evaluation strings indexed.")

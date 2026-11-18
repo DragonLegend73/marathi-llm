@@ -13,9 +13,11 @@ configs:
   - HHRLHF_T
 skip_configs:
   - IndoWordNet # skip lexical dictionary rows per plan
+per_config_limit: 15000 # cap per sub-config for balanced diversity and bounded RAM
+sample_limit: 105000
 clean:
   min_devanagari_purity: 60.0
-  max_seq_len: 512
+  max_seq_len: 768
   min_response_chars: 10
   max_repeat_ngram_frac: 0.25
   max_latin_ratio: 0.15

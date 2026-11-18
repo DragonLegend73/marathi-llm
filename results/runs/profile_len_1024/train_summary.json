@@ -1,0 +1,29 @@
+{
+  "run_id": "profile_len_1024",
+  "git_commit": "58ecf24a224210d041bd839278f4a53b8a0e4fcc",
+  "model": "unsloth/Qwen2.5-1.5B-Instruct-bnb-4bit",
+  "quant": "prequantized-bnb-4bit",
+  "data": "worst_case_1024",
+  "max_seq_len": 1024,
+  "seed": 0,
+  "profile_only": true,
+  "train": {
+    "steps": 100,
+    "elapsed_s": 918.95,
+    "final_train_loss": 1.09132,
+    "final_dev_loss": null,
+    "pct_examples_kept": 100.0,
+    "mean_tokens_kept": 967.77,
+    "per_device_batch": 2,
+    "grad_accum": 4,
+    "peak_vram_gb": 1.469,
+    "peak_vram_reserved_gb": 1.504,
+    "gpu_temp_c": 59.16,
+    "steps_per_s": 0.1088,
+    "samples_per_s": 0.8706,
+    "tokens_per_s": 842.5,
+    "full_1epoch_steps": 25,
+    "full_1epoch_eta_min": 3.8,
+    "response_only_loss": true
+  }
+}

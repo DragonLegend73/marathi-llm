@@ -38,7 +38,7 @@ class CleanProgressLogger:
         """Advances the counter by n and prints an update if mininterval elapsed."""
         self.n += n
         now = time.time()
-        if (now - self.last_update_time) >= self.mininterval or self.n >= self.total:
+        if (now - self.last_update_time) >= self.mininterval or self.n == self.total:
             self._print_line()
 
     def set_postfix(self, postfix_dict: Dict[str, Any], refresh: bool = False):
@@ -73,7 +73,7 @@ class CleanProgressLogger:
         )
 
         bar_len = 20
-        filled_len = int(bar_len * self.n // self.total)
+        filled_len = min(bar_len, int(bar_len * self.n // self.total))
         bar = "█" * filled_len + " " * (bar_len - filled_len)
 
         line = (

@@ -8,9 +8,10 @@ from typing import Dict, Any, List
 class FunnelTracker:
     """Tracks counts of accepted and rejected rows through data cleaning stages."""
 
-    def __init__(self, source_name: str, pipeline_version: str = "2.1"):
+    def __init__(self, source_name: str, pipeline_version: str = "2.2"):
         self.source_name = source_name
         self.pipeline_version = pipeline_version
+        self.metadata: Dict[str, Any] = {}
         self.counts = {
             "raw_ingested": 0,
             "failed_empty_or_short": 0,
@@ -34,12 +35,15 @@ class FunnelTracker:
         self.rejection_details[reason] = self.rejection_details.get(reason, 0) + 1
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        d: Dict[str, Any] = {
             "pipeline_version": self.pipeline_version,
             "source": self.source_name,
-            "counts": self.counts,
-            "rejection_details": self.rejection_details,
         }
+        if self.metadata:
+            d["metadata"] = self.metadata
+        d["counts"] = self.counts
+        d["rejection_details"] = self.rejection_details
+        return d
 
     def save(self, output_path: Path):
         output_path.parent.mkdir(parents=True, exist_ok=True)

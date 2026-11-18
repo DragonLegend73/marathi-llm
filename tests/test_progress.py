@@ -33,3 +33,18 @@ def test_get_progress_bar_factory():
     pbar.update(5)
     pbar.close()
     assert "Factory Test" in buf.getvalue()
+
+
+def test_clean_progress_logger_throttles_past_total():
+    buf = io.StringIO()
+    pbar = CleanProgressLogger(total=5, desc="Overflow", mininterval=60.0, file=buf)
+    for _ in range(20):
+        pbar.update(1)
+    pbar.close()
+
+    lines = [line for line in buf.getvalue().split("\n") if line.strip()]
+    # Only initial line (0/5) and exact total (5/5) should print; updates 6..20 are throttled
+    assert len(lines) == 2
+    assert "5/5" in lines[-1]
+    assert "|████████████████████|" in lines[-1]
+
