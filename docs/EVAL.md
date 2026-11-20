@@ -169,19 +169,72 @@ Following the adoption of `max_seq_len = 768` (Section 5) and dataset rebuilds u
 
 | Metric | Base (Zero-shot `chat`) | Control 512 (`A_qwen25_1p5b`) | **Control 768 (`A_qwen25_1p5b_768`)** | Δ vs Base | Δ vs Control 512 |
 |---|---:|---:|---:|---:|---:|
-| **MILU dev acc (%)** *(n=810)* | 27.16 `[24.20, 30.37]` | 28.64 `[25.68, 31.98]` | **29.14** `[25.93, 32.22]` | +1.98 pp | +0.50 pp |
-| **Flores en→mr chrF++** *(n=997)* | 10.37 `[10.05, 10.70]` | 10.70 `[10.40, 11.03]` | **11.20** `[10.86, 11.56]` | **+0.83** | **+0.50** |
-| **Flores mr→en chrF++** *(n=997)* | 25.47 `[24.58, 26.39]` | 28.26 `[27.48, 29.09]` | **28.86** `[27.91, 29.78]` | **+3.39** | **+0.60** |
-| **Held-out Marathi BPC** *(n=997)* | 2.8584 | 2.2342 | **2.1724** | **−0.6860** | **−0.0618** |
-| Perplexity (held-out) | 8.87 | 5.02 | **4.80** | −4.07 | −0.22 |
-| Script Purity (%) | 99.89 | 100.00 | **100.00** | +0.11 pp | +0.00 pp |
-| Marathi Lang-ID (%) | 96.5 | 97.49 | **96.39** | −0.11 pp | −1.10 pp |
-| 4-gram Repetition (%) | 71.5 | 60.48 | **55.37** | **−16.13 pp** | **−5.11 pp** |
-| EOS Completion Rate (%) | 23.0 | 37.11 | **42.43** | +19.43 pp | +5.32 pp |
-| Mean Gen Tokens (cap=256) | 218.8 | 193.7 | **186.8** | −32.0 | −6.9 |
+| **MILU dev acc (%)** *(n=810)* | 27.16 `[24.20, 30.37]` | 28.64 `[25.68, 31.98]` | **29.14** `[25.93, 32.22]` | +1.98 pp | +0.49 pp |
+| **Flores en→mr chrF++** *(n=997)* | 9.45 `[9.16, 9.73]` | 10.70 `[10.40, 11.03]` | **11.20** `[10.86, 11.56]` | **+1.75** | **+0.50** |
+| **Flores mr→en chrF++** *(n=997)* | 25.47 `[24.71, 26.15]` | 28.26 `[27.48, 29.09]` | **28.86** `[27.91, 29.78]` | **+3.38** | **+0.60** |
+| **Held-out Marathi BPC** *(n=997)* | 2.8584 | 2.2342 | **2.1724** | **-0.6859** | **-0.0618** |
+| 4-gram Repetition (%) | 55.67 | 60.48 | **55.37** | **-0.30 pp** | **-5.12 pp** |
+| EOS Completion Rate (%) | 36.61 | 37.11 | **42.43** | **+5.82 pp** | **+5.32 pp** |
 
 - **Training Resource**: Ran 1,500 steps in 92.9 min (`1.422 GB` allocated, `1.484 GB` peak reserved VRAM, temperature 58.0°C).
 - **Interpretation**: Retraining under `max_seq_len = 768` strictly improves upon the `cap=512` control across translation quality (en→mr `+0.50` chrF++, mr→en `+0.60` chrF++), held-out bits-per-character (`2.2342 → 2.1724`), and generation fluency (repetition rate drops from `60.48%` to `55.37%` and clean EOS termination increases to `42.43%`). The 768 control serves as the valid, fair comparator (`B1`) for Stage B screening.
+
+---
+
+## 7. Stage B Data Screening Results (Phase 4)
+
+Screening evaluated all four data sources on `Qwen2.5-1.5B-Instruct` under matched training hyperparameters (`batch=2 × accum=4`, `lr=2e-4`, LoRA `r=16, alpha=32`, response-only loss, `max_seq_len=768`, seed 0). Dev evaluation used the pre-registered screening protocol (`--flores-limit 200`, `n=810` MILU, `n=997` held-out Marathi BPC).
+
+### Comparative Screening Matrix
+
+| Metric | B1: S0 Alpaca-mr (12k) | B2: S1 IndicAlign (12k) | B3: S2 SandLogic (12k) | B4: S3 Aya-mr (1.2k) |
+|---|---:|---:|---:|---:|
+| **Examples / Steps** | 12,000 / 1,500 | 12,000 / 1,500 | 12,000 / 1,500 | 1,203 / 151 |
+| **Total Train Tokens** | 3.89M | 3.85M | 4.99M | 0.23M |
+| **Training Time (min)** | 92.9 min | 95.2 min | 114.4 min | 5.9 min |
+| **Final Train / Dev Loss** | 0.9874 / 0.8946 | 0.8726 / 0.7819 | 1.0601 / 0.9579 | 1.3025 / 1.2487 |
+| **MILU dev acc (%)** *(n=810)* | 29.14 `[25.93, 32.22]` | 28.77 `[25.43, 31.98]` | **30.12** `[27.16, 33.33]` | 28.77 `[25.80, 31.85]` |
+| Mean Option Letters Mass | 0.264 | 0.129 | 0.429 | 0.908 *(biased to C: 67%)* |
+| **Flores en→mr chrF++** *(n=200)* | **11.60** `[10.83, 12.43]` | 11.12 `[10.52, 11.74]` | 10.69 `[9.97, 11.39]` | 7.62 `[7.10, 8.15]` |
+| **Flores mr→en chrF++** *(n=200)* | 27.18 `[25.19, 29.31]` | 23.32 `[21.29, 25.54]` | **29.67** `[27.51, 31.79]` | 22.98 `[21.37, 24.70]` |
+| **Held-out Marathi BPC** *(n=997)* | 2.1724 | 2.1860 | **2.1721** | 2.6156 |
+| Perplexity (held-out) | 4.80 | 4.84 | **4.80** | 6.61 |
+| Devanagari Script Purity (%) | **100.00** | **100.00** | 84.39 | 99.38 |
+| Marathi Lang-ID (%) | **96.39** | 93.50 | 84.50 | 96.00 |
+| English Leak Ratio (%) | **0.00** | **0.00** | 15.61 | 0.62 |
+| 4-gram Repetition (%) | **55.37** | 77.00 | 58.50 | 86.50 |
+| Clean EOS Rate (%) | **42.43** | 16.50 | 33.00 | 13.50 |
+
+### Key Empirical Findings & Source Trade-offs
+
+1. **B3 (S2 SandLogic)** achieves the highest knowledge-based accuracy (**30.12%** MILU, option mass `0.429`) and highest mr→en translation (**29.67** chrF++), and ties S0 on Marathi BPC (**2.1721**). However, SandLogic has significant English code-switching in its training responses, causing **15.6% English leakage** and lowering script purity to **84.39%**.
+2. **B1 (S0 Alpaca-mr)** provides the cleanest Devanagari generations (**100.0%** script purity, **0.0%** English leakage), the highest en→mr translation score (**11.60** chrF++), lowest 4-gram repetition (**55.37%**), and highest clean EOS completion rate (**42.43%**).
+3. **B2 (S1 IndicAlign)** matches S0 on MILU accuracy (`28.77%` vs `29.14%`), but suffers from high phrase repetition (**77.0%**) and low EOS completion (**16.5%**), driven by its large share of short synthetic dialogues (`Wiki_Conv`).
+4. **B4 (S3 Aya)** shows that training on only 1,203 human-written examples without data augmentation is insufficient for general adaptation: Marathi BPC is severely elevated (**2.6156**), en→mr translation degrades to **7.62** chrF++, repetition reaches **86.5%**, and MILU exhibits heavy letter skew (67% predicted 'C').
+
+---
+
+## 8. Training & Evaluation Hardening Verifications (F2 & F3)
+
+Prior to running full candidate model evaluations, the training and evaluation harness underwent empirical verification for end-of-turn token inclusion and special token accounting:
+
+### F2 Verification: End-of-Turn Token Label in Loss
+- **Mechanism**: Training records are constructed as prompt-completion pairs and passed to TRL's `SFTTrainer` configured with `completion_only_loss=True`.
+- **Empirical Check**: Decoded the last 5 unmasked labels (`label != -100`) from collated examples across all Stage A candidate model tokenizers:
+  - `qwen25_1p5b`: unmasked tail `['नवी', ' दिल्ली', '.', '<|im_end|>', '\n']` (token `151645` `<|im_end|>` unmasked).
+  - `qwen3_1p7b`: unmasked tail `['नवी', ' दिल्ली', '.', '<|im_end|>', '\n']` (token `151645` `<|im_end|>` unmasked).
+  - `gemma3_1b`: unmasked tail `['नवी', ' दिल्ली', '.', '<end_of_turn>', '\n']` (token `106` `<end_of_turn>` unmasked).
+  - `llama32_1b`: unmasked tail `['नवी', ' दिल्ली.', '<|eot_id|>']` (token `128009` `<|eot_id|>` unmasked).
+  - `sarvam1`: unmasked tail `['नवी', ' दिल्ली.', '</s>', '\n']` (token `2` `</s>` unmasked).
+- **Verdict**: In all five architectures, the assistant turn's terminating end-of-turn token is unmasked and directly optimized in the loss by design. No retraining of existing checkpoints is needed.
+
+### F3 & F10 Verification: Special Token & BOS Accounting
+- **Mechanism**: When `prompt_format == "chat"` and the model has a native chat template, the template formats BOS directly. When falling back to raw or plain text (e.g. for template-less models), BOS must be added via `add_special_tokens=True`. The rule `uses_template = (prompt_format == "chat") and bool(getattr(tokenizer, "chat_template", None)); add_special = not uses_template` was implemented across `generate.py`, `milu.py`, `flores.py`, and `runner.py`.
+- **Empirical Check**: Verified on all 5 Stage A tokenizers:
+  - Models with BOS (Gemma-3 ID 2, Llama-3.2 ID 128000, Sarvam-1 ID 1): exactly 1 BOS token in encoded prompts under both chat and plain fallback.
+  - Models without BOS (Qwen2.5 / Qwen3): 0 BOS tokens (turn delimiters `<|im_start|>` utilized).
+- **Unit Test**: Fully enforced by `tests/test_bos_and_templates.py`.
+
 
 
 

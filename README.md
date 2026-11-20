@@ -50,7 +50,7 @@ Full per-run outputs are saved in [`results/runs/`](results/runs/):
 
 ## Data Pipeline Audit & Fix
 
-> While auditing the data pipeline I found that word tokenization used `\w+`, which splits Devanagari words at vowel signs, so the "8-word" overlap check actually matched ~3-word spans and rejected 11,378 rows (~22%) as false benchmark contamination. I fixed tokenization (shared [`text.py`](src/marathi_llm/data/text.py) helper excluding danda punctuation `।`/`॥`), widened the decontamination index to MILU val/test, Flores, XQuAD-IN, IndicIFEval, and native prompts, and applied the 512-token length filter, which had silently not been running. Re-auditing the v0 training data with the fixed matcher found 1 overlapping row out of 52,002 (an IndicIFEval riddle prompt at n=8, no overlap detected with Flores or MILU). Regression tests cover the tokenizer bug and prompt-template parity. The rebuilt 12k S0 set (30,509 clean rows after filtering 51,973 ingested rows; 17,220 filtered by max sequence length, 2 deduplicated, 0 decontaminated) is saved in [`data/processed/`](data/processed/) for later experiments; v0 itself was trained on the raw dataset.
+> While auditing the data pipeline I found that word tokenization used `\w+`, which splits Devanagari words at vowel signs, so the "8-word" overlap check actually matched ~3-word spans and rejected 11,378 rows (~22%) as false benchmark contamination. I fixed tokenization (shared [`text.py`](src/marathi_llm/data/text.py) helper excluding danda punctuation `।`/`॥`), widened the decontamination index to MILU val/test, Flores, XQuAD-IN, IndicIFEval, and native prompts, and enforced sequence length bounds. Re-auditing the v0 training data with the fixed matcher found 1 overlapping row out of 52,002 (an IndicIFEval riddle prompt at n=8, no overlap detected with Flores or MILU). Regression tests cover the tokenizer bug and prompt-template parity. The initial 512-token cleaned build (30,509 pool after filtering 51,973 ingested rows) is archived in [`data/processed/archive_cap512/`](data/processed/archive_cap512/); the active Phase 3/4 pipeline uses `pipeline_version: 2.2` with `max_seq_len = 768` and the chat-template counter (44,644 clean pool for S0; built into [`data/processed/s0_alpaca_12k.jsonl`](data/processed/s0_alpaca_12k.jsonl)).
 
 Audit artifacts:
 - [`results/audit_v0_contamination.json`](results/audit_v0_contamination.json)
@@ -98,12 +98,12 @@ The baseline control was retrained from scratch at `max_seq_len = 768` (12k S0, 
 
 | Metric | Base (Zero-shot `chat`) | Control 512 (`A_qwen25_1p5b`) | **Control 768 (`A_qwen25_1p5b_768`)** | Δ vs Base | Δ vs Control 512 |
 |---|---:|---:|---:|---:|---:|
-| **MILU dev acc (%)** *(n=810)* | 27.16 `[24.20, 30.37]` | 28.64 `[25.68, 31.98]` | **29.14** `[25.93, 32.22]` | +1.98 pp | +0.50 pp |
-| **Flores en→mr chrF++** *(n=997)* | 10.37 `[10.05, 10.70]` | 10.70 `[10.40, 11.03]` | **11.20** `[10.86, 11.56]` | **+0.83** | **+0.50** |
-| **Flores mr→en chrF++** *(n=997)* | 25.47 `[24.58, 26.39]` | 28.26 `[27.48, 29.09]` | **28.86** `[27.91, 29.78]` | **+3.39** | **+0.60** |
-| **Held-out Marathi BPC** *(n=997)* | 2.8584 | 2.2342 | **2.1724** | **−0.6860** | **−0.0618** |
-| 4-gram Repetition (%) | 71.5 | 60.48 | **55.37** | **−16.13 pp** | **−5.11 pp** |
-| EOS Completion Rate (%) | 23.0 | 37.11 | **42.43** | +19.43 pp | +5.32 pp |
+| **MILU dev acc (%)** *(n=810)* | 27.16 `[24.20, 30.37]` | 28.64 `[25.68, 31.98]` | **29.14** `[25.93, 32.22]` | +1.98 pp | +0.49 pp |
+| **Flores en→mr chrF++** *(n=997)* | 9.45 `[9.16, 9.73]` | 10.70 `[10.40, 11.03]` | **11.20** `[10.86, 11.56]` | **+1.75** | **+0.50** |
+| **Flores mr→en chrF++** *(n=997)* | 25.47 `[24.71, 26.15]` | 28.26 `[27.48, 29.09]` | **28.86** `[27.91, 29.78]` | **+3.38** | **+0.60** |
+| **Held-out Marathi BPC** *(n=997)* | 2.8584 | 2.2342 | **2.1724** | **-0.6859** | **-0.0618** |
+| 4-gram Repetition (%) | 55.67 | 60.48 | **55.37** | **-0.30 pp** | **-5.12 pp** |
+| EOS Completion Rate (%) | 36.61 | 37.11 | **42.43** | **+5.82 pp** | **+5.32 pp** |
 
 ---
 
@@ -113,13 +113,16 @@ The baseline control was retrained from scratch at `max_seq_len = 768` (12k S0, 
 marathi-llm/
 ├── configs/             # Model, data, and training YAML configs
 ├── data/
-│   ├── processed/       # Rebuilt S0 datasets and pipeline stats (pipeline_version 2.1)
+│   ├── processed/       # Cleaned 768-token datasets & stats (pipeline_version 2.2, S0–S3)
+│   │   └── archive_cap512/ # Archived 512-token datasets
 │   ├── splits/          # Committed split manifests (s0_test_ids.json, etc.)
-│   └── eval/            # Eval prompt suites
-├── docs/
+│   └── eval/            # Evaluation benchmarks (Flores, MILU, native prompts, BPC responses)
+├── docs/                # EVAL.md, DATA_CARD.md, replication docs
 │   └── legacy/          # Original v0 notes and leakage audit
 ├── results/
-│   ├── runs/            # 4-way evaluation metrics (base_chat, base_alpaca, v0_alpaca, v0_chat)
+│   ├── figures/         # Summary metric plots
+│   ├── runs/            # Evaluation run outputs (active runs + archive/)
+│   ├── tables/          # Markdown tables generated by make_tables.py
 │   ├── audit_v0_contamination.json
 │   └── hw_profile.json  # VRAM, throughput, and thermal profile
 ├── scripts/             # Audit, profiling, and helper scripts
@@ -145,21 +148,21 @@ source .venv/bin/activate.fish
 ### 2. Run Test Suite
 
 ```bash
-PYTHONPATH=src .venv/bin/pytest
+.venv/bin/pytest
 ```
 
 ### 3. Reproduce the 4-Way Evaluation
 
 ```bash
-PYTHONPATH=src .venv/bin/python -m marathi_llm.eval.runner --run-id base_chat   --prompt-format chat      --skip-ifeval
-PYTHONPATH=src .venv/bin/python -m marathi_llm.eval.runner --run-id base_alpaca --prompt-format alpaca_v0 --skip-ifeval
-PYTHONPATH=src .venv/bin/python -m marathi_llm.eval.runner --run-id v0_alpaca   --prompt-format alpaca_v0 --skip-ifeval --adapter DragonLegend/marathi-qwen2.5-lora
-PYTHONPATH=src .venv/bin/python -m marathi_llm.eval.runner --run-id v0_chat     --prompt-format chat      --skip-ifeval --adapter DragonLegend/marathi-qwen2.5-lora
+.venv/bin/python -m marathi_llm.eval.runner --run-id base_chat   --prompt-format chat      --skip-ifeval
+.venv/bin/python -m marathi_llm.eval.runner --run-id base_alpaca --prompt-format alpaca_v0 --skip-ifeval
+.venv/bin/python -m marathi_llm.eval.runner --run-id v0_alpaca   --prompt-format alpaca_v0 --skip-ifeval --adapter DragonLegend/marathi-qwen2.5-lora
+.venv/bin/python -m marathi_llm.eval.runner --run-id v0_chat     --prompt-format chat      --skip-ifeval --adapter DragonLegend/marathi-qwen2.5-lora
 ```
 
 ### 4. Rebuild S0 Dataset & Run Contamination Audit
 
 ```bash
-PYTHONPATH=src .venv/bin/python -m marathi_llm.data.build --config configs/data/s0_alpaca.yaml
-PYTHONPATH=src .venv/bin/python scripts/audit_v0_contamination.py
+.venv/bin/python -m marathi_llm.data.build --config configs/data/s0_alpaca.yaml
+.venv/bin/python scripts/audit_v0_contamination.py
 ```

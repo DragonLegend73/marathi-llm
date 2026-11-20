@@ -19,3 +19,15 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+### Dataset & Model Weights Licensing Notice
+
+1. **Codebase**: The software and evaluation codebase in this repository is licensed under the MIT License above.
+2. **Datasets & Derived Model Checkpoints**:
+   - **Alpaca-Marathi (S0)**: Derived from Stanford Alpaca (`text-davinci-003` machine translations). In accordance with Stanford Alpaca's terms and OpenAI's Terms of Use, any model weights, adapters, or processed corpora derived from S0 (`rachittshah/alpaca-marahti`) are strictly non-commercial and intended for academic research only.
+   - **IndicAlign-Instruct (S1)**: Distributed under Creative Commons Attribution 4.0 International (CC-BY-4.0).
+   - **Indic Chat Dataset (S2)**: Distributed under Apache License 2.0.
+   - **Aya Dataset (S3)**: Distributed under Apache License 2.0.
+

@@ -7,6 +7,7 @@ from typing import List, Dict, Any, Tuple, Set, Optional
 from datasketch import MinHash, MinHashLSH
 
 from marathi_llm.data.text import words, normalize_for_match
+from huggingface_hub import hf_hub_download
 
 
 def extract_word_ngrams(text: str, n: int = 8) -> Set[str]:
@@ -113,53 +114,80 @@ def load_all_eval_targets(decontaminator: BenchmarkDecontaminator):
             print(f"Warning: could not load MILU {split} for decontamination: {e}")
 
     # 2. Flores-IN (dev + test, source and target in en_mr and mr_en)
-    flores_hub_dir = Path("/home/dragon/.cache/huggingface/hub/datasets--google--IndicGenBench_flores_in/snapshots/f8650438298df086750ff4973661bb58a201a5ee")
     for direction in ["en_mr", "mr_en"]:
         for split in ["dev", "test"]:
-            f_path = flores_hub_dir / f"flores_{direction}_{split}.json"
-            if f_path.exists():
-                try:
-                    with open(f_path, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                    for item in data.get("examples", []):
-                        decontaminator.add_eval_text(item.get("source", ""), f"flores_{direction}_{split}")
-                        decontaminator.add_eval_text(item.get("target", ""), f"flores_{direction}_{split}")
-                except Exception as e:
-                    print(f"Warning: could not read Flores {direction} {split}: {e}")
+            filename = f"flores_{direction}_{split}.json"
+            local_path = Path("data/raw/IndicGenBench_flores_in") / filename
+            try:
+                if local_path.exists():
+                    f_path = local_path
+                else:
+                    f_path = Path(
+                        hf_hub_download(
+                            repo_id="google/IndicGenBench_flores_in",
+                            filename=filename,
+                            repo_type="dataset",
+                        )
+                    )
+                with open(f_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                for item in data.get("examples", []):
+                    decontaminator.add_eval_text(item.get("source", ""), f"flores_{direction}_{split}")
+                    decontaminator.add_eval_text(item.get("target", ""), f"flores_{direction}_{split}")
+            except Exception as e:
+                print(f"Warning: could not read Flores {direction} {split}: {e}")
 
     # 3. XQuAD-IN (dev + test)
-    xquad_hub_dir = Path("/home/dragon/.cache/huggingface/hub/datasets--google--IndicGenBench_xquad_in/snapshots/32026f0bcb0eed9aea0418694448c143c98acb0a")
     for split in ["dev", "test"]:
-        x_path = xquad_hub_dir / f"xquad_mr_{split}.json"
-        if x_path.exists():
-            try:
-                with open(x_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                for ex in data.get("examples", []):
-                    if ex.get("context"):
-                        decontaminator.add_eval_text(ex.get("context"), f"xquad_{split}_context")
-                    if ex.get("question"):
-                        decontaminator.add_eval_text(ex.get("question"), f"xquad_{split}_q")
-                    for a in ex.get("answers", []):
-                        if a.get("text"):
-                            decontaminator.add_eval_text(a.get("text"), f"xquad_{split}_ans")
-            except Exception as e:
-                print(f"Warning: could not read XQuAD {split}: {e}")
+        filename = f"xquad_mr_{split}.json"
+        local_path = Path("data/raw/IndicGenBench_xquad_in") / filename
+        try:
+            if local_path.exists():
+                x_path = local_path
+            else:
+                x_path = Path(
+                    hf_hub_download(
+                        repo_id="google/IndicGenBench_xquad_in",
+                        filename=filename,
+                        repo_type="dataset",
+                    )
+                )
+            with open(x_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            for ex in data.get("examples", []):
+                if ex.get("context"):
+                    decontaminator.add_eval_text(ex.get("context"), f"xquad_{split}_context")
+                if ex.get("question"):
+                    decontaminator.add_eval_text(ex.get("question"), f"xquad_{split}_q")
+                for a in ex.get("answers", []):
+                    if a.get("text"):
+                        decontaminator.add_eval_text(a.get("text"), f"xquad_{split}_ans")
+        except Exception as e:
+            print(f"Warning: could not read XQuAD {split}: {e}")
 
     # 4. IndicIFEval (ground + trans)
-    ifeval_base = Path("/home/dragon/.cache/huggingface/hub/datasets--ai4bharat--IndicIFEval/snapshots/4343c1b174322e32cc785ef89fe117038fdad7a9")
     for cfg in ["indicifeval-ground", "indicifeval-trans"]:
-        p_path = ifeval_base / cfg / "mr-00000-of-00001.parquet"
-        if p_path.exists():
-            try:
-                import pandas as pd
-                df = pd.read_parquet(p_path)
-                for _, row in df.iterrows():
-                    prompt = row.get("prompt", "")
-                    if prompt:
-                        decontaminator.add_eval_text(prompt, f"ifeval_{cfg}")
-            except Exception as e:
-                print(f"Warning: could not read IndicIFEval {cfg}: {e}")
+        parquet_rel = f"{cfg}/mr-00000-of-00001.parquet"
+        local_path = Path("IndicIFEval") / parquet_rel
+        try:
+            if local_path.exists():
+                p_path = local_path
+            else:
+                p_path = Path(
+                    hf_hub_download(
+                        repo_id="ai4bharat/IndicIFEval",
+                        filename=parquet_rel,
+                        repo_type="dataset",
+                    )
+                )
+            import pandas as pd
+            df = pd.read_parquet(p_path)
+            for _, row in df.iterrows():
+                prompt = row.get("prompt", "")
+                if prompt:
+                    decontaminator.add_eval_text(prompt, f"ifeval_{cfg}")
+        except Exception as e:
+            print(f"Warning: could not read IndicIFEval {cfg}: {e}")
 
     # 5. Held-out Aya prompts & BPC responses if existing
     native_eval_path = Path("data/eval/native_prompts.jsonl")

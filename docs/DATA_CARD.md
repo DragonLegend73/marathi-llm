@@ -1,6 +1,6 @@
 # Dataset Card: Marathi Instruction Datasets (`docs/DATA_CARD.md`)
 
-This document records the provenance, licensing, cleaning protocols, decontamination procedures, and fixed-budget builds (`pipeline_version: 2.1`) for the Marathi LLM comparative study.
+This document records the provenance, licensing, cleaning protocols, decontamination procedures, and fixed-budget builds (`pipeline_version: 2.2`) for the Marathi LLM comparative study.
 
 ---
 
@@ -67,12 +67,12 @@ Every candidate training example is checked against an index of **52,149 evaluat
 
 All active funnel counts below are recorded in committed `data/processed/*.stats.json` files (uniform sampling, `seed = 42`, frozen `data/eval/` held-outs):
 
-| Source | Raw Ingested | Failed Length (>768 tok) | Failed Other Clean | Passed Clean | Failed Dedup | Failed Decontam | Final Pool | Built Train / Dev | Mean Tok (Train) | Total Train Tok |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| **S0 (`s0_alpaca`)** | 51,973 | 3,084 | 4,242 | 44,647 | 2 | 1 | 44,644 | 12,000 / 500 | 324.5 | 3.89M |
-| **S1 (`s1_indicalign`)** | 90,000 | 32,402 | 6,709 | 50,889 | 8,511 | 15 | 42,363 | 12,000 / 500 | 321.1 | 3.85M |
-| **S2 (`s2_sandlogic`)** | 100,000 | 49,760 | 8,131 | 42,109 | 2,371 | 2 | 39,736 | 12,000 / 500 | 415.4 | 4.99M |
-| **S3 (`s3_aya`)** | 3,545 | 282 | 1,033 *(413 Hindi, 482 short)* | 1,630 | 203 | 691 *(600 frozen IDs + 91 overlap)* | 1,336 | 1,203 / 133 | 191.8 | 0.23M |
+| Source | Raw Ingested | Held-Out Removed | Failed Length (>768 tok) | Failed Other Clean | Passed Clean | Failed Dedup | Failed Decontam | Final Pool | Built Train / Dev | Mean Tok (Train) | Total Train Tok |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| **S0 (`s0_alpaca`)** | 51,973 | 0 | 3,084 | 4,242 | 44,647 | 2 | 1 | 44,644 | 12,000 / 500 | 324.5 | 3.89M |
+| **S1 (`s1_indicalign`)** | 90,000 | 0 | 32,402 | 6,709 | 50,889 | 8,511 | 15 | 42,363 | 12,000 / 500 | 321.1 | 3.85M |
+| **S2 (`s2_sandlogic`)** | 100,000 | 0 | 49,760 | 8,131 | 42,109 | 2,371 | 2 | 39,736 | 12,000 / 500 | 415.4 | 4.99M |
+| **S3 (`s3_aya`)** | 3,545 | 600 *(frozen eval)* | 282 | 1,033 *(413 Hindi, 482 short)* | 1,630 | 203 | 91 *(benchmark overlap)* | 1,336 | 1,203 / 133 | 191.8 | 0.23M |
 
 ### S1 IndicAlign (`s1_indicalign_12k.jsonl`) Sub-Config Composition (Uniform Sampling, `max_seq_len = 768`)
 

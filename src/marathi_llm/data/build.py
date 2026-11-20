@@ -31,6 +31,7 @@ def build_dataset_pipeline(
     output_dir: str = "data/processed",
     eval_decontaminator: Optional[BenchmarkDecontaminator] = None,
     tokenizer=None,
+    output_name: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Runs the end-to-end cleaning and build pipeline for a given data source config."""
     cfg_file = Path(config_path)
@@ -277,9 +278,13 @@ def build_dataset_pipeline(
     out_p = Path(output_dir)
     out_p.mkdir(parents=True, exist_ok=True)
 
-    train_file = out_p / f"{source_name}_12k.jsonl"
-    dev_file = out_p / f"{source_name}_dev500.jsonl"
-    stats_file = out_p / f"{source_name}.stats.json"
+    prefix = output_name if output_name else f"{source_name}_12k"
+    dev_prefix = f"{output_name}_dev" if output_name else f"{source_name}_dev500"
+    stats_prefix = output_name if output_name else source_name
+
+    train_file = out_p / f"{prefix}.jsonl"
+    dev_file = out_p / f"{dev_prefix}.jsonl"
+    stats_file = out_p / f"{stats_prefix}.stats.json"
 
     with open(train_file, "w", encoding="utf-8") as f:
         for ex in train_set:
@@ -310,6 +315,7 @@ def main():
     parser.add_argument("--tokenizer-name", default="unsloth/Qwen2.5-1.5B-Instruct-bnb-4bit")
     parser.add_argument("--skip-tokenizer", action="store_true")
     parser.add_argument("--skip-decontamination", action="store_true")
+    parser.add_argument("--output-name", default=None, help="Custom prefix for output train/dev/stats files")
     args = parser.parse_args()
 
     tokenizer = None
@@ -332,6 +338,7 @@ def main():
         output_dir=args.output_dir,
         eval_decontaminator=decontaminator,
         tokenizer=tokenizer,
+        output_name=args.output_name,
     )
 
 

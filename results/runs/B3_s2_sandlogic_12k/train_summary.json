@@ -1,0 +1,29 @@
+{
+  "run_id": "B3_s2_sandlogic_12k",
+  "git_commit": "593a29fbe2589db5c31bc4d27b897b99d80db49f",
+  "model": "unsloth/Qwen2.5-1.5B-Instruct-bnb-4bit",
+  "quant": "prequantized-bnb-4bit",
+  "data": "s2_sandlogic_12k",
+  "max_seq_len": 768,
+  "seed": 0,
+  "profile_only": false,
+  "train": {
+    "steps": 1500,
+    "elapsed_s": 6864.15,
+    "final_train_loss": 1.06005,
+    "final_dev_loss": 0.95788,
+    "pct_examples_kept": 100.0,
+    "mean_tokens_kept": 415.44,
+    "per_device_batch": 2,
+    "grad_accum": 4,
+    "peak_vram_gb": 1.427,
+    "peak_vram_reserved_gb": 1.496,
+    "gpu_temp_c": 53.84,
+    "steps_per_s": 0.2185,
+    "samples_per_s": 1.7482,
+    "tokens_per_s": 726.3,
+    "full_1epoch_steps": 1500,
+    "full_1epoch_eta_min": 114.4,
+    "response_only_loss": true
+  }
+}

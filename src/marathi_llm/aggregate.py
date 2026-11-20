@@ -16,18 +16,26 @@ from marathi_llm.eval.stats import paired_bootstrap_ci, paired_bootstrap_corpus_
 
 
 def load_all_runs(runs_dir: Path) -> Dict[str, Dict[str, Any]]:
-    """Loads all metrics.json files from runs_dir subdirectories."""
+    """Loads all metrics.json files from runs_dir subdirectories, skipping archive."""
     runs = {}
     if not runs_dir.exists():
         return runs
 
     for run_path in sorted(runs_dir.iterdir()):
-        if run_path.is_dir():
+        if run_path.is_dir() and run_path.name != "archive" and not run_path.name.startswith("."):
             metrics_file = run_path / "metrics.json"
             if metrics_file.exists():
                 try:
                     with open(metrics_file, "r", encoding="utf-8") as f:
-                        runs[run_path.name] = json.load(f)
+                        data = json.load(f)
+                    flores_recs = run_path / "flores_en_mr_records.json"
+                    if flores_recs.exists():
+                        try:
+                            with open(flores_recs, "r", encoding="utf-8") as fr:
+                                data["flores_n"] = len(json.load(fr))
+                        except Exception:
+                            pass
+                    runs[run_path.name] = data
                 except Exception as e:
                     print(f"Warning: could not read {metrics_file}: {e}")
     return runs
@@ -53,6 +61,7 @@ def build_overview_table(runs: Dict[str, Dict[str, Any]]) -> str:
         "MILU Val Acc (%)",
         "Flores en→mr (chrF++)",
         "Flores mr→en (chrF++)",
+        "Flores n",
         "Held-out BPC",
         "Script Purity (%)",
         "EOS Rate (%)",
@@ -83,9 +92,16 @@ def build_overview_table(runs: Dict[str, Dict[str, Any]]) -> str:
         mr_en_ci = flores.get("ci95", {}).get("mr_en")
         mr_en_str = format_ci(mr_en_val, mr_en_ci, fmt=".2f")
 
+        flores_n_str = str(m.get("flores_n", "—"))
+
         bpc_val = m.get("heldout_bpc", {}).get("flores_mr_dev")
-        bpc_ci = m.get("heldout_bpc", {}).get("ci95")
-        bpc_str = format_ci(bpc_val, bpc_ci, fmt=".4f")
+        corpus_ci = m.get("heldout_bpc", {}).get("corpus_ci95")
+        if corpus_ci:
+            bpc_str = format_ci(bpc_val, corpus_ci, fmt=".4f")
+        elif bpc_val is not None:
+            bpc_str = f"{bpc_val:.4f}"
+        else:
+            bpc_str = "—"
 
         auto = m.get("auto", {})
         purity_str = f"{auto.get('script_purity', 0.0):.2f}%" if "script_purity" in auto else "—"
@@ -103,6 +119,7 @@ def build_overview_table(runs: Dict[str, Dict[str, Any]]) -> str:
             milu_str,
             en_mr_str,
             mr_en_str,
+            flores_n_str,
             bpc_str,
             purity_str,
             eos_str,
@@ -491,16 +508,6 @@ def main():
             "## 2. Statistical Significance & Paired Tests",
             "",
             format_paired_table(paired),
-            "",
-        ])
-
-    # Stage A selection ranking
-    ranking_md = calculate_stage_a_ranking(runs)
-    if ranking_md:
-        summary_content.extend([
-            "## 3. Pre-Registered Model Ranking",
-            "",
-            ranking_md,
             "",
         ])
 

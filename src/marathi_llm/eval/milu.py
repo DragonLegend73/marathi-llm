@@ -127,7 +127,8 @@ def evaluate_milu(
             prompt_text = prepare_prompt(raw_prompt, tokenizer, prompt_format=prompt_format)
             prompts.append(prompt_text)
 
-        add_special = (prompt_format != "chat")
+        uses_template = (prompt_format == "chat") and bool(getattr(tokenizer, "chat_template", None))
+        add_special = not uses_template
         for p in prompts:
             if len(tokenizer.encode(p, add_special_tokens=add_special)) > 1024:
                 truncated_count += 1
@@ -250,7 +251,7 @@ def main():
     parser.add_argument("--adapter", default=None, help="Optional LoRA adapter path")
     parser.add_argument("--split", default="validation", choices=["validation", "test"], help="MILU split")
     parser.add_argument("--batch-size", type=int, default=4, help="Inference batch size")
-    parser.add_argument("--prompt-format", default="chat", choices=["chat", "alpaca_v0", "raw"])
+    parser.add_argument("--prompt-format", default="chat", choices=["chat", "alpaca_v0", "raw", "plain"])
     parser.add_argument("--output-dir", default="results/milu", help="Directory to save results")
     args = parser.parse_args()
 

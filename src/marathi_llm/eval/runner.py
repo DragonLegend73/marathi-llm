@@ -20,10 +20,10 @@ import transformers
 import peft
 import sacrebleu
 
-from marathi_llm.generate import load_model_and_tokenizer
+from marathi_llm.generate import load_model_and_tokenizer, generate_batch
 from marathi_llm.eval.milu import evaluate_milu
 from marathi_llm.eval.flores import evaluate_flores_direction
-from marathi_llm.eval.bpc import compute_bpc, load_marathi_reference_texts
+from marathi_llm.eval.bpc import compute_bpc, load_marathi_reference_texts, load_bpc_reference_texts
 from marathi_llm.eval.ifeval import run_indicifeval
 from marathi_llm.eval.auto_metrics import evaluate_generations
 
@@ -66,6 +66,8 @@ def run_full_evaluation(
     run_flores: bool = True,
     run_bpc: bool = True,
     run_ifeval: bool = True,
+    native_prompts: Optional[str] = None,
+    bpc_source: str = "flores",
     ifeval_limit: Optional[int] = None,
     bpc_limit: Optional[int] = None,
     flores_limit: Optional[int] = None,
@@ -231,31 +233,76 @@ def run_full_evaluation(
 
     # 3. Held-out Bits Per Character (BPC)
     if run_bpc and ("heldout_bpc" not in metrics or force):
-        print("\n--- [3/4] Running Held-out BPC ---", flush=True)
+        print(f"\n--- [3/4] Running Held-out BPC (source={bpc_source}) ---", flush=True)
         t0 = time.time()
         bpc_partial = str(run_dir / "bpc_partial.jsonl")
         if force and Path(bpc_partial).exists():
             Path(bpc_partial).unlink()
 
-        ref_texts = load_marathi_reference_texts(limit=bpc_limit)
-        bpc_res = compute_bpc(model, tokenizer, ref_texts, checkpoint_path=bpc_partial, device=device)
+        ref_items = load_bpc_reference_texts(source=bpc_source, limit=bpc_limit)
+        bpc_res = compute_bpc(model, tokenizer, ref_items, checkpoint_path=bpc_partial, device=device)
         bpc_s = bpc_res["summary"]
         metrics["heldout_bpc"] = {
-            "flores_mr_dev": bpc_s["bits_per_character"],
+            "source": bpc_source,
+            "bpc": bpc_s["bits_per_character"],
+            "flores_mr_dev": bpc_s["bits_per_character"],  # backwards compatibility
             "flores_mr_dev_bpb": bpc_s["bits_per_byte"],
             "perplexity": bpc_s["token_perplexity"],
             "n_sentences": bpc_s["n_sentences"],
             "ci95": bpc_s.get("bpc_sentence_ci95"),
+            "corpus_ci95": bpc_s.get("corpus_ci95"),
             "bos_token_id_used": bpc_s.get("bos_token_id_used"),
         }
-        with open(run_dir / "bpc_records.json", "w", encoding="utf-8") as f:
+        bpc_records_filename = "bpc_records.json" if bpc_source == "flores" else f"bpc_{bpc_source}_records.json"
+        with open(run_dir / bpc_records_filename, "w", encoding="utf-8") as f:
             json.dump(bpc_res["records"], f, indent=2, ensure_ascii=False)
         save_metrics_checkpoint(metrics, metrics_path)
         print(f"[BPC Completed in {time.time() - t0:.1f}s] BPC: {bpc_s['bits_per_character']:.4f}, BPB: {bpc_s['bits_per_byte']:.4f}, Perplexity: {bpc_s['token_perplexity']:.2f}", flush=True)
     elif "heldout_bpc" in metrics:
         print("\n--- [3/4] BPC already completed in checkpoint; skipping ---", flush=True)
 
-    # 4. Automatic Generation Metrics
+    # 4. Native Prompts Generation Evaluation (Aya held-out native Marathi)
+    if native_prompts and Path(native_prompts).exists() and ("native_generation" not in metrics or force):
+        print(f"\n--- Running Native Prompts Evaluation ({native_prompts}) ---", flush=True)
+        t0 = time.time()
+        native_items = []
+        with open(native_prompts, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    native_items.append(json.loads(line))
+
+        native_partial = str(run_dir / "native_prompts_partial.jsonl")
+        if force and Path(native_partial).exists():
+            Path(native_partial).unlink()
+
+        native_gens = generate_batch(
+            model=model,
+            tokenizer=tokenizer,
+            items=native_items,
+            batch_size=batch_size,
+            prompt_format=prompt_format,
+            checkpoint_path=native_partial,
+            device=device,
+        )
+        native_stats = evaluate_generations(native_gens)
+        metrics["native_generation"] = {
+            "n_prompts": len(native_gens),
+            "script_purity": native_stats.get("script_purity", 0.0),
+            "lang_id_mr": native_stats.get("lang_id_mr", 0.0),
+            "repeat_4gram": native_stats.get("repeat_4gram", 0.0),
+            "distinct_4grams_ratio": native_stats.get("distinct_4grams_ratio", 0.0),
+            "eos_rate": native_stats.get("eos_rate", 0.0),
+            "mean_len_tokens": native_stats.get("mean_len_tokens", 0.0),
+            "english_leak_ratio": native_stats.get("english_leak_ratio", 0.0),
+            "empty_output_rate": native_stats.get("empty_output_rate", 0.0),
+        }
+        with open(run_dir / "native_prompts_generations.jsonl", "w", encoding="utf-8") as f:
+            for g in native_gens:
+                f.write(json.dumps(g, ensure_ascii=False) + "\n")
+        save_metrics_checkpoint(metrics, metrics_path)
+        print(f"[Native Prompts Completed in {time.time() - t0:.1f}s] Purity: {native_stats.get('script_purity', 0.0):.1f}%, Rep4: {native_stats.get('repeat_4gram', 0.0):.1f}%, EOS: {native_stats.get('eos_rate', 0.0):.1f}%", flush=True)
+
+    # 5. Automatic Generation Metrics (Translation outputs)
     if all_generations:
         auto_stats = evaluate_generations(all_generations)
         metrics["auto"] = {
@@ -318,7 +365,7 @@ def main():
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--output-dir", default="results/runs")
     parser.add_argument("--batch-size", type=int, default=2)
-    parser.add_argument("--prompt-format", default="chat", choices=["chat", "alpaca_v0", "raw"])
+    parser.add_argument("--prompt-format", default="chat", choices=["chat", "alpaca_v0", "raw", "plain"])
     parser.add_argument("--prequantized", action="store_true", default=None)
     parser.add_argument("--no-prequantized", action="store_false", dest="prequantized")
     parser.add_argument("--force", action="store_true", help="Overwrite existing run_id directory")
@@ -327,6 +374,8 @@ def main():
     parser.add_argument("--skip-flores", action="store_true")
     parser.add_argument("--skip-bpc", action="store_true")
     parser.add_argument("--skip-ifeval", action="store_true")
+    parser.add_argument("--native-prompts", default=None, help="Path to native prompts JSONL (e.g. data/eval/native_prompts.jsonl)")
+    parser.add_argument("--bpc-source", default="flores", choices=["flores", "aya"], help="Held-out text source for BPC ('flores' or 'aya')")
     parser.add_argument("--ifeval-limit", type=int, default=None)
     parser.add_argument("--bpc-limit", type=int, default=None)
     parser.add_argument("--flores-limit", type=int, default=None)
@@ -346,6 +395,8 @@ def main():
         run_flores=not args.skip_flores,
         run_bpc=not args.skip_bpc,
         run_ifeval=not args.skip_ifeval,
+        native_prompts=args.native_prompts,
+        bpc_source=args.bpc_source,
         ifeval_limit=args.ifeval_limit,
         bpc_limit=args.bpc_limit,
         flores_limit=args.flores_limit,

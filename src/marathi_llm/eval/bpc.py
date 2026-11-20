@@ -34,6 +34,34 @@ def load_marathi_reference_texts(limit: Optional[int] = None) -> List[str]:
         raise RuntimeError(f"Failed to load Flores Marathi reference texts: {e}") from e
 
 
+def load_bpc_reference_texts(
+    source: str = "flores",
+    limit: Optional[int] = None,
+    custom_path: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """Loads reference texts for BPC evaluation from Flores dev or Aya held-out responses."""
+    items = []
+    if source == "aya":
+        path = Path(custom_path or "data/eval/bpc_responses.jsonl")
+        if not path.exists():
+            raise FileNotFoundError(f"Aya BPC reference file not found at {path}")
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    r = json.loads(line)
+                    items.append({
+                        "id": r.get("id", str(len(items))),
+                        "text": r.get("response", "").strip(),
+                    })
+    else:
+        flores_texts = load_marathi_reference_texts(limit=limit)
+        items = [{"id": f"flores_mr_dev_{i}", "text": t} for i, t in enumerate(flores_texts)]
+
+    if limit is not None:
+        items = items[:limit]
+    return items
+
+
 def compute_bpc(
     model,
     tokenizer,
@@ -97,7 +125,14 @@ def compute_bpc(
         pbar.update(start_idx)
 
     for idx in range(start_idx, len(texts)):
-        text = texts[idx]
+        item = texts[idx]
+        if isinstance(item, dict):
+            text = item.get("text", "")
+            rec_id = item.get("id", str(idx))
+        else:
+            text = item
+            rec_id = str(idx)
+
         if not text:
             pbar.update(1)
             continue
@@ -135,6 +170,7 @@ def compute_bpc(
 
         sentence_bpcs.append(sent_bpc)
         rec = {
+            "id": rec_id,
             "idx": idx,
             "text": text,
             "nll": float(seq_nll),
@@ -169,6 +205,19 @@ def compute_bpc(
 
     bpc_ci = bootstrap_ci(sentence_bpcs, n_bootstraps=1000)
 
+    # Corpus BPC bootstrap CI (sampling sentences and computing aggregate BPC)
+    rng = np.random.default_rng(42)
+    n_rec = len(per_sentence_records)
+    if n_rec > 0:
+        nlls = np.array([r["nll"] for r in per_sentence_records], dtype=np.float64)
+        chars = np.array([r["chars"] for r in per_sentence_records], dtype=np.float64)
+        boot_idx = rng.integers(0, n_rec, size=(1000, n_rec))
+        c_sums = chars[boot_idx].sum(axis=1)
+        boot_bpcs = nlls[boot_idx].sum(axis=1) / (ln2 * c_sums)
+        corpus_ci = [float(np.percentile(boot_bpcs, 2.5)), float(np.percentile(boot_bpcs, 97.5))]
+    else:
+        corpus_ci = [0.0, 0.0]
+
     summary = {
         "n_sentences": len(texts),
         "total_chars": total_chars,
@@ -179,6 +228,7 @@ def compute_bpc(
         "bits_per_byte": float(bpb),
         "token_perplexity": float(perplexity),
         "bpc_sentence_ci95": [float(bpc_ci["ci_low"]), float(bpc_ci["ci_high"])],
+        "corpus_ci95": corpus_ci,
         "bos_token_id_used": bos_id,
     }
 

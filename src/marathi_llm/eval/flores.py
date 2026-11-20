@@ -137,7 +137,7 @@ def main():
     parser.add_argument("--direction", default="both", choices=["en_mr", "mr_en", "both"])
     parser.add_argument("--split", default="dev", choices=["dev", "test"])
     parser.add_argument("--batch-size", type=int, default=4)
-    parser.add_argument("--prompt-format", default="chat", choices=["chat", "alpaca_v0", "raw"])
+    parser.add_argument("--prompt-format", default="chat", choices=["chat", "alpaca_v0", "raw", "plain"])
     parser.add_argument("--limit", type=int, default=None, help="Optional sample limit for testing")
     parser.add_argument("--output-dir", default="results/flores")
     args = parser.parse_args()

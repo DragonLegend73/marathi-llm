@@ -73,6 +73,16 @@ def main():
         action="store_true",
         help="Skip training and run evaluation only",
     )
+    parser.add_argument(
+        "--force-train",
+        action="store_true",
+        help="Force retraining even if adapter already exists",
+    )
+    parser.add_argument(
+        "--force-eval",
+        action="store_true",
+        help="Force re-evaluation even if metrics.json already exists",
+    )
     args = parser.parse_args()
 
     py = sys.executable
@@ -92,25 +102,31 @@ def main():
 
         # 1. Train
         if not args.eval_only:
-            train_cmd = [
-                py, "-m", "marathi_llm.train",
-                "--config", "configs/models/qwen25_1p5b.yaml",
-                "--data", data_path,
-                "--run-id", run_id,
-            ]
-            run_cmd(f"Train {r['name']}", train_cmd)
+            if (Path(adapter_path) / "adapter_model.safetensors").exists() and not args.force_train:
+                print(f"\n[Stage B] Adapter already exists at {adapter_path}; skipping training (pass --force-train to retrain).", flush=True)
+            else:
+                train_cmd = [
+                    py, "-m", "marathi_llm.train",
+                    "--config", "configs/models/qwen25_1p5b.yaml",
+                    "--data", data_path,
+                    "--run-id", run_id,
+                ]
+                run_cmd(f"Train {r['name']}", train_cmd)
 
         # 2. Evaluate with --flores-limit
-        eval_cmd = [
-            py, "-m", "marathi_llm.eval.runner",
-            "--run-id", run_id,
-            "--prompt-format", "chat",
-            "--skip-ifeval",
-            "--batch-size", "4",
-            "--flores-limit", str(args.flores-limit),
-            "--adapter", adapter_path,
-        ]
-        run_cmd(f"Evaluate {r['name']} (flores_limit={args.flores_limit})", eval_cmd)
+        if Path(metrics_path).exists() and not args.force_eval:
+            print(f"\n[Stage B] Metrics already exist at {metrics_path}; skipping evaluation (pass --force-eval to re-evaluate).", flush=True)
+        else:
+            eval_cmd = [
+                py, "-m", "marathi_llm.eval.runner",
+                "--run-id", run_id,
+                "--prompt-format", "chat",
+                "--skip-ifeval",
+                "--batch-size", "4",
+                "--flores-limit", str(args.flores_limit),
+                "--adapter", adapter_path,
+            ]
+            run_cmd(f"Evaluate {r['name']} (flores_limit={args.flores_limit})", eval_cmd)
 
     total_min = (time.time() - t_total) / 60.0
     print(f"\n{'='*70}")

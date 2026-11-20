@@ -27,6 +27,17 @@ ALPACAV0_PROMPT_WITH_INPUT = (
     "### सूचना:\n{instruction}\n\n### इनपुट:\n{input_text}\n\n### प्रतिसाद:\n"
 )
 
+PLAIN_PROMPT = "### सूचना:\n{instruction}\n\n### प्रतिसाद:\n"
+
+
+def format_plain_prompt(instruction: str, input_text: Optional[str] = None) -> str:
+    """Standard instruction-response wrapper for template-less models."""
+    inst = (instruction or "").strip()
+    inp = (input_text or "").strip()
+    content = f"{inst}\n\n{inp}" if inp else inst
+    return PLAIN_PROMPT.format(instruction=content)
+
+
 
 def load_model_and_tokenizer(
     model_id: str,
@@ -98,9 +109,11 @@ def prepare_prompt(
 ) -> str:
     """
     Formats prompt according to prompt_format:
-    - 'chat': native chat template (with enable_thinking=False for Qwen3)
-    - 'alpaca_v0': legacy Alpaca training template (with full Marathi preamble)
-    - 'raw': unchanged string
+    - 'chat': native chat template (with enable_thinking=False for Qwen3);
+              falls back automatically to 'plain' if tokenizer has no chat_template.
+    - 'plain': standard instruction-response wrapper (### सूचना: ... ### प्रतिसाद:).
+    - 'alpaca_v0': legacy Alpaca training template (with full Marathi preamble).
+    - 'raw': unchanged string.
     """
     if prompt_format == "alpaca_v0":
         if input_text and input_text.strip():
@@ -110,10 +123,15 @@ def prepare_prompt(
             )
         return ALPACAV0_PROMPT_NO_INPUT.format(instruction=raw_prompt.strip())
 
-    if prompt_format == "raw" or not hasattr(tokenizer, "apply_chat_template") or not tokenizer.chat_template:
+    if prompt_format == "raw":
         return raw_prompt
 
-    # Default: 'chat' format
+    has_chat_template = hasattr(tokenizer, "apply_chat_template") and bool(getattr(tokenizer, "chat_template", None))
+
+    if prompt_format == "plain" or (prompt_format == "chat" and not has_chat_template):
+        return format_plain_prompt(raw_prompt, input_text)
+
+    # Default: 'chat' format with native chat template
     messages = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
@@ -221,8 +239,10 @@ def generate_batch(
     pending_items = [c for c in sorted_items if c["id"] not in completed_records]
     n_pending = len(pending_items)
 
-    # Avoid double BOS: when prompt_format == "chat", chat template already rendered BOS
-    add_special = (prompt_format != "chat")
+    # Avoid double BOS: when prompt_format == "chat" with a chat template, the template already renders BOS.
+    # When falling back to raw or plain text (no chat template), add BOS via add_special_tokens=True.
+    uses_template = (prompt_format == "chat") and bool(getattr(tokenizer, "chat_template", None))
+    add_special = not uses_template
 
     pbar = get_progress_bar(
         total=n_total,
@@ -329,7 +349,7 @@ def main():
     parser.add_argument("--output", default="results/generations.jsonl")
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--max-new-tokens", type=int, default=256)
-    parser.add_argument("--prompt-format", default="chat", choices=["chat", "alpaca_v0", "raw"])
+    parser.add_argument("--prompt-format", default="chat", choices=["chat", "alpaca_v0", "raw", "plain"])
     args = parser.parse_args()
 
     # Load input items

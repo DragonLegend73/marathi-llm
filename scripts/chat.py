@@ -1,73 +1,67 @@
-# Interactive demo tool for chatting with fine-tuned models
 """
-chat.py — Interactive terminal chat with the fine-tuned Marathi model
+chat.py — Interactive terminal chat with fine-tuned Marathi models
 ----------------------------------------------------------------------
-Loads the LoRA adapter and starts a conversation loop.
-Type 'quit' or 'exit' to stop.  Type 'reset' to clear history.
-
-Usage:  python chat.py
+Usage:
+    python scripts/chat.py --model unsloth/Qwen2.5-1.5B-Instruct-bnb-4bit --adapter results/runs/A_qwen25_1p5b_768/adapter
 """
 
+import argparse
 import torch
-from unsloth import FastLanguageModel
-from peft import PeftModel
-from config import MODEL_NAME, MAX_SEQ_LEN, ADAPTER_DIR, MAX_NEW_TOKENS, TEMPERATURE
+from marathi_llm.generate import load_model_and_tokenizer, prepare_prompt
 
-PROMPT_PREFIX = (
-    "खाली एक सूचना आहे जी एखाद्या कार्याचे वर्णन करते. "
-    "विनंती योग्य रितीने पूर्ण करणारा प्रतिसाद लिहा.\n\n"
-    "### सूचना:\n{instruction}\n\n### प्रतिसाद:\n"
-)
 
-def build_prompt(instruction):
-    return PROMPT_PREFIX.format(instruction=instruction)
+def main():
+    parser = argparse.ArgumentParser(description="Interactive terminal chat for Marathi LLM")
+    parser.add_argument("--model", default="unsloth/Qwen2.5-1.5B-Instruct-bnb-4bit", help="Base model ID")
+    parser.add_argument("--adapter", default=None, help="Path to LoRA adapter")
+    parser.add_argument("--prompt-format", default="chat", choices=["chat", "alpaca_v0", "raw", "plain"])
+    parser.add_argument("--max-new-tokens", type=int, default=256)
+    parser.add_argument("--temperature", type=float, default=0.7)
+    parser.add_argument("--device", default="cuda:0")
+    args = parser.parse_args()
 
-# ── Load model ────────────────────────────────────────────────
-print("Loading fine-tuned model …")
-model, tokenizer = FastLanguageModel.from_pretrained(
-    model_name    = MODEL_NAME,
-    max_seq_length= MAX_SEQ_LEN,
-    dtype         = torch.float16,
-    load_in_4bit  = True,
-)
-model = PeftModel.from_pretrained(model, ADAPTER_DIR)
-FastLanguageModel.for_inference(model)
-print("Model ready. Type your instruction in Marathi (or English).")
-print("Commands: 'reset' to clear context | 'quit' to exit\n")
+    print(f"Loading model: {args.model} (adapter={args.adapter})...")
+    model, tokenizer, _ = load_model_and_tokenizer(
+        model_id=args.model,
+        adapter_path=args.adapter,
+        device=args.device,
+    )
+    print("Model ready. Type your instruction in Marathi (or English).")
+    print("Commands: 'quit' or 'exit' to quit.\n")
 
-# ── Chat loop ─────────────────────────────────────────────────
-while True:
-    try:
-        user_input = input("You: ").strip()
-    except (EOFError, KeyboardInterrupt):
-        print("\nGoodbye!")
-        break
+    uses_template = (args.prompt_format == "chat") and bool(getattr(tokenizer, "chat_template", None))
+    add_special = not uses_template
 
-    if not user_input:
-        continue
+    while True:
+        try:
+            user_input = input("You: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\nGoodbye!")
+            break
 
-    if user_input.lower() in ("quit", "exit"):
-        print("Goodbye!")
-        break
+        if not user_input:
+            continue
 
-    if user_input.lower() == "reset":
-        print("[Context reset]\n")
-        continue
+        if user_input.lower() in ("quit", "exit"):
+            print("Goodbye!")
+            break
 
-    prompt = build_prompt(user_input)
-    inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
+        prompt = prepare_prompt(user_input, tokenizer, prompt_format=args.prompt_format)
+        inputs = tokenizer(prompt, return_tensors="pt", add_special_tokens=add_special).to(args.device)
 
-    with torch.no_grad():
-        output_ids = model.generate(
-            **inputs,
-            max_new_tokens = MAX_NEW_TOKENS,
-            max_length     = None,
-            temperature    = TEMPERATURE,
-            do_sample      = True,
-            pad_token_id   = tokenizer.eos_token_id,
-        )
+        with torch.no_grad():
+            output_ids = model.generate(
+                **inputs,
+                max_new_tokens=args.max_new_tokens,
+                temperature=args.temperature,
+                do_sample=True,
+                pad_token_id=tokenizer.eos_token_id,
+            )
 
-    new_tokens = output_ids[0][inputs["input_ids"].shape[1]:]
-    response = tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
+        new_tokens = output_ids[0][inputs["input_ids"].shape[1]:]
+        response = tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
+        print(f"\nModel: {response}\n")
 
-    print(f"\nModel: {response}\n")
+
+if __name__ == "__main__":
+    main()

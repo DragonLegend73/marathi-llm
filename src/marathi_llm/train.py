@@ -20,6 +20,8 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import yaml
 
+from marathi_llm.generate import format_plain_prompt
+
 
 ALL_LINEAR_MODULES = [
     "q_proj",
@@ -116,7 +118,7 @@ def build_prompt_completion_records(
         else:
             records.append(
                 {
-                    "prompt": f"### सूचना:\n{user_content}\n\n### प्रतिसाद:\n",
+                    "prompt": format_plain_prompt(row.get("instruction", ""), row.get("input", "")),
                     "completion": response,
                 }
             )
@@ -222,13 +224,20 @@ def write_loss_csv(log_history: List[Dict[str, Any]], output_path: Path) -> None
 
 
 def infer_eval_data_path(train_data_path: str) -> Optional[str]:
-    """Infers sibling `*_dev500.jsonl` from `*_12k.jsonl` if present."""
+    """Infers sibling dev JSONL from train data path if present."""
     p = Path(train_data_path)
     name = p.name
     if "_12k.jsonl" in name:
         candidate = p.with_name(name.replace("_12k.jsonl", "_dev500.jsonl"))
         if candidate.exists():
             return str(candidate)
+    if "_train.jsonl" in name:
+        candidate = p.with_name(name.replace("_train.jsonl", "_dev.jsonl"))
+        if candidate.exists():
+            return str(candidate)
+    prefix = name.split("_")[0]
+    for sibling in sorted(p.parent.glob(f"{prefix}*dev*.jsonl")):
+        return str(sibling)
     return None
 
 
@@ -455,7 +464,7 @@ def train_from_config(
         num_train_epochs=epochs,
         max_steps=max_steps,
         learning_rate=lr,
-        warmup_steps=0.05,
+        warmup_ratio=0.05,
         lr_scheduler_type="cosine",
         optim="paged_adamw_8bit",
         bf16=use_bf16,
